@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebiBook - Live Learning Events This Week</title>
+    
+    <!-- Google Analytics GA4 -->
+    <!-- TODO: Replace GA_MEASUREMENT_ID with your actual Google Analytics Measurement ID -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'GA_MEASUREMENT_ID');
+    </script>
+    
+    <style>
+        /* ============================================================================
+           UX OPTIMIZATION: System fonts, generous spacing, clean hierarchy
+           ============================================================================ */
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            /* System fonts for native feel and performance */
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.7; /* Increased for better readability */
+            color: #1a1a1a;
+            background-color: #ffffff;
+            padding: 32px 20px;
+            max-width: 950px; /* Wider for better scanability (900-1000px range) */
+            margin: 0 auto;
+        }
+        
+        header {
+            margin-bottom: 48px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e5e5e5; /* Subtle divider */
+        }
+        
+        h1 {
+            font-size: 36px;
+            font-weight: 700; /* Bolder for clear hierarchy */
+            margin-bottom: 12px;
+            color: #000000;
+            line-height: 1.3;
+        }
+        
+        .subtitle {
+            font-size: 17px;
+            color: #4a4a4a;
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+        
+        .last-updated {
+            font-size: 14px;
+            color: #888888; /* Muted but visible */
+        }
+        
+        .events-list {
+            margin-bottom: 80px;
+        }
+        
+        /* ============================================================================
+           EVENT STYLING: Lightweight, scannable, not heavy cards
+           ============================================================================ */
+        .event {
+            padding: 32px 0; /* Generous vertical spacing */
+            border-bottom: 1px solid #e5e5e5; /* Subtle divider instead of box */
+            transition: opacity 0.1s; /* Fast, subtle hover feedback */
+        }
+        
+        .event:last-child {
+            border-bottom: none;
+        }
+        
+        .event:hover {
+            opacity: 0.85; /* Subtle hover feedback */
+        }
+        
+        .event-title {
+            font-size: 22px;
+            font-weight: 700; /* Bold for hierarchy */
+            margin-bottom: 12px;
+            color: #000000;
+            line-height: 1.4;
+        }
+        
+        /* Metadata row: topic • date • duration */
+        .event-metadata {
+            font-size: 14px;
+            color: #666666; /* Muted for secondary info */
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        
+        .event-metadata span {
+            display: inline;
+        }
+        
+        .event-metadata span:not(:last-child)::after {
+            content: ' • ';
+            margin: 0 6px;
+            color: #999999;
+        }
+        
+        .event-topic {
+            font-weight: 500;
+            color: #4a4a4a;
+        }
+        
+        /* Description: normal body text, not italic */
+        .event-audience {
+            font-size: 15px;
+            color: #333333;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        /* CTAs aligned to bottom right for consistency */
+        .event-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        
+        /* Primary CTA: solid, neutral, clear */
+        .btn-primary {
+            background: #1a1a1a;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px; /* 44px+ height for accessibility */
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            transition: background-color 0.1s; /* Fast transition */
+            min-height: 44px; /* Accessibility: minimum click target */
+        }
+        
+        .btn-primary:hover {
+            background: #333333;
+        }
+        
+        /* Secondary CTA: outline style */
+        .btn-secondary {
+            background: transparent;
+            color: #4a4a4a;
+            border: 1px solid #d0d0d0;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.1s; /* Fast transition */
+            min-height: 44px; /* Accessibility */
+            display: inline-flex;
+            align-items: center;
+        }
+        
+        .btn-secondary:hover {
+            border-color: #999999;
+            color: #333333;
+        }
+        
+        /* Saved state: subtle color change, no popups */
+        .btn-secondary.saved {
+            background: #f5f5f5;
+            border-color: #b0b0b0;
+            color: #4a4a4a;
+        }
+        
+        /* Trust signal: footer note */
+        .trust-note {
+            font-size: 13px;
+            color: #888888;
+            text-align: center;
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e5e5;
+        }
+        
+        /* Email section: clean, not boxed */
+        .email-section {
+            padding: 32px 0;
+            margin-top: 48px;
+            border-top: 1px solid #e5e5e5;
+        }
+        
+        .email-section h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+        
+        .email-section p {
+            font-size: 15px;
+            color: #666666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .email-form {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .email-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 15px;
+            font-family: inherit;
+            min-height: 44px; /* Accessibility */
+        }
+        
+        .email-input:focus {
+            outline: 2px solid #1a1a1a;
+            outline-offset: -1px;
+            border-color: #1a1a1a;
+        }
+        
+        .btn-submit {
+            background: #1a1a1a;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.1s; /* Fast transition */
+            min-height: 44px; /* Accessibility */
+        }
+        
+        .btn-submit:hover {
+            background: #333333;
+        }
+        
+        /* Ensure all clickable elements have pointer cursor */
+        a, button {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Live learning events happening this week — handpicked</h1>
+        <p class="subtitle">No hosting. No ads. Just links to live sessions worth attending.</p>
+        <!-- TODO: Update the date below when you refresh the events -->
+        <p class="last-updated">Last updated: January 15, 2024</p>
+    </header>
+    
+    <section class="events-list" id="events-list">
+        <!-- Events will be dynamically inserted here -->
+    </section>
+    
+    <section class="email-section">
+        <h2>Get weekly updates</h2>
+        <p>Get notified when new events are added (optional)</p>
+        <form class="email-form" id="email-form">
+            <input 
+                type="email" 
+                class="email-input" 
+                id="email-input" 
+                placeholder="your@email.com"
+                required
+            >
+            <button type="submit" class="btn-submit">Subscribe</button>
+        </form>
+    </section>
+    
+    <p class="trust-note">Curated manually. No paid placements.</p>
+    
+    <script>
+        // ============================================================================
+        // EVENTS DATA
+        // ============================================================================
+        // TODO: Add or edit events in this array. Each event needs:
+        // - id: unique identifier (string)
+        // - title: event name (string)
+        // - topic: single word category (string)
+        // - date: date string (string)
+        // - time: time string with timezone (string)
+        // - duration: how long the event lasts (string)
+        // - audience: one-line description of who it's for (string)
+        // - url: external link to the event (string)
+        // ============================================================================
+        const events = [
+            {
+                id: 'event-1',
+                title: 'Introduction to React Hooks',
+                topic: 'Development',
+                date: 'January 18, 2024',
+                time: '2:00 PM EST',
+                duration: '1 hour',
+                audience: 'Frontend developers new to React',
+                url: 'https://example.com/react-hooks'
+            },
+            {
+                id: 'event-2',
+                title: 'Data Science Fundamentals',
+                topic: 'Data',
+                date: 'January 19, 2024',
+                time: '10:00 AM PST',
+                duration: '90 minutes',
+                audience: 'Beginners interested in data analysis',
+                url: 'https://example.com/data-science'
+            },
+            {
+                id: 'event-3',
+                title: 'Product Design Workshop',
+                topic: 'Design',
+                date: 'January 20, 2024',
+                time: '3:30 PM EST',
+                duration: '2 hours',
+                audience: 'Product managers and designers',
+                url: 'https://example.com/product-design'
+            }
+        ];
+        
+        // ============================================================================
+        // SAVED EVENTS
+        // ============================================================================
+        // Load saved events from localStorage on page load
+        function loadSavedEvents() {
+            const saved = localStorage.getItem('webiBookSavedEvents');
+            return saved ? JSON.parse(saved) : [];
+        }
+        
+        // Save an event ID to localStorage
+        function saveEvent(eventId) {
+            const saved = loadSavedEvents();
+            if (!saved.includes(eventId)) {
+                saved.push(eventId);
+                localStorage.setItem('webiBookSavedEvents', JSON.stringify(saved));
+            }
+        }
+        
+        // Check if an event is saved
+        function isEventSaved(eventId) {
+            const saved = loadSavedEvents();
+            return saved.includes(eventId);
+        }
+        
+        // ============================================================================
+        // RENDER EVENTS
+        // ============================================================================
+        function renderEvents() {
+            const container = document.getElementById('events-list');
+            const savedEvents = loadSavedEvents();
+            
+            container.innerHTML = events.map(event => {
+                const isSaved = savedEvents.includes(event.id);
+                
+                return `
+                    <div class="event">
+                        <h2 class="event-title">${event.title}</h2>
+                        <div class="event-metadata">
+                            <span class="event-topic">${event.topic}</span>
+                            <span>${event.date}</span>
+                            <span>${event.time}</span>
+                            <span>${event.duration}</span>
+                        </div>
+                        <p class="event-audience">${event.audience}</p>
+                        <div class="event-actions">
+                            <a 
+                                href="${event.url}" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                class="btn-primary"
+                                data-event-id="${event.id}"
+                                data-event-title="${event.title}"
+                                data-event-topic="${event.topic}"
+                            >
+                                Go to event
+                            </a>
+                            <button 
+                                class="btn-secondary ${isSaved ? 'saved' : ''}"
+                                data-event-id="${event.id}"
+                            >
+                                ${isSaved ? 'Saved' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Attach event listeners after rendering
+            attachEventListeners();
+        }
+        
+        // ============================================================================
+        // EVENT LISTENERS
+        // ============================================================================
+        function attachEventListeners() {
+            // Handle "Go to event" clicks
+            document.querySelectorAll('.btn-primary').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    const eventId = this.getAttribute('data-event-id');
+                    const eventTitle = this.getAttribute('data-event-title');
+                    const eventTopic = this.getAttribute('data-event-topic');
+                    
+                    // Fire Google Analytics event
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'event_click', {
+                            'event_id': eventId,
+                            'event_name': eventTitle,
+                            'event_topic': eventTopic
+                        });
+                    }
+                    
+                    // Link will open in new tab (target="_blank" handles this)
+                });
+            });
+            
+            // Handle "Save" button clicks
+            document.querySelectorAll('.btn-secondary').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const eventId = this.getAttribute('data-event-id');
+                    
+                    // Save to localStorage
+                    saveEvent(eventId);
+                    
+                    // Update button appearance
+                    this.classList.add('saved');
+                    this.textContent = 'Saved';
+                    
+                    // Fire Google Analytics event
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'event_saved', {
+                            'event_id': eventId
+                        });
+                    }
+                });
+            });
+        }
+        
+        // ============================================================================
+        // EMAIL FORM HANDLING
+        // ============================================================================
+        document.getElementById('email-form').addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent page reload
+            
+            const email = document.getElementById('email-input').value;
+            
+            // Log to console (no backend)
+            console.log('Email submitted:', email);
+            
+            // Fire Google Analytics event
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'email_submitted', {
+                    'email': email
+                });
+            }
+            
+            // Clear input and show feedback
+            document.getElementById('email-input').value = '';
+            alert('Thanks! We\'ll keep you updated.');
+        });
+        
+        // ============================================================================
+        // INITIALIZE
+        // ============================================================================
+        // Render events when page loads
+        renderEvents();
+        
+        // Page view is automatically tracked by GA4 config in the head
+    </script>
+</body>
+</html>
