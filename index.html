@@ -258,6 +258,120 @@
         a, button {
             cursor: pointer;
         }
+        
+        /* ============================================================================
+           LOGIN SECTION
+           ============================================================================ */
+        .login-section {
+            background: #f8f8f8;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 32px;
+        }
+        
+        .login-section.logged-in {
+            background: transparent;
+            border: none;
+            padding: 12px 0;
+        }
+        
+        .login-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .login-input {
+            flex: 1;
+            max-width: 300px;
+            padding: 10px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 15px;
+            font-family: inherit;
+            min-height: 44px;
+        }
+        
+        .login-greeting {
+            font-size: 15px;
+            color: #333333;
+        }
+        
+        .login-greeting strong {
+            color: #000000;
+        }
+        
+        .btn-logout {
+            background: transparent;
+            color: #666666;
+            border: 1px solid #d0d0d0;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+        
+        .btn-logout:hover {
+            border-color: #999999;
+            color: #333333;
+        }
+        
+        /* ============================================================================
+           NAVIGATION TABS
+           ============================================================================ */
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #e5e5e5;
+            margin-bottom: 32px;
+        }
+        
+        .nav-tab {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666666;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        
+        .nav-tab:hover {
+            color: #333333;
+        }
+        
+        .nav-tab.active {
+            color: #000000;
+            border-bottom-color: #000000;
+        }
+        
+        /* ============================================================================
+           SAVED EVENTS SECTION
+           ============================================================================ */
+        .saved-events-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666666;
+        }
+        
+        .saved-events-empty p {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .saved-events-empty small {
+            font-size: 14px;
+            color: #999999;
+        }
+        
+        .section-hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -268,8 +382,43 @@
         <p class="last-updated">Last updated: January 15, 2024</p>
     </header>
     
+    <!-- Login Section -->
+    <section class="login-section" id="login-section">
+        <div id="login-form-container">
+            <form class="login-form" id="login-form">
+                <input 
+                    type="text" 
+                    class="login-input" 
+                    id="login-input" 
+                    placeholder="Enter your name to get started"
+                    required
+                    minlength="2"
+                >
+                <button type="submit" class="btn-submit">Sign in</button>
+            </form>
+        </div>
+        <div id="logged-in-container" style="display: none;">
+            <div class="login-form">
+                <p class="login-greeting">Welcome back, <strong id="username-display"></strong>!</p>
+                <button type="button" class="btn-logout" id="logout-btn">Sign out</button>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-all" data-tab="all">All Events</button>
+        <button class="nav-tab" id="tab-saved" data-tab="saved">Saved Events</button>
+    </div>
+    
+    <!-- All Events Section -->
     <section class="events-list" id="events-list">
         <!-- Events will be dynamically inserted here -->
+    </section>
+    
+    <!-- Saved Events Section -->
+    <section class="events-list section-hidden" id="saved-events-list">
+        <!-- Saved events will be dynamically inserted here -->
     </section>
     
     <section class="email-section">
@@ -337,6 +486,39 @@
         ];
         
         // ============================================================================
+        // USER AUTHENTICATION (Simple localStorage-based)
+        // ============================================================================
+        function getCurrentUser() {
+            return localStorage.getItem('webiBookUsername');
+        }
+        
+        function setCurrentUser(username) {
+            localStorage.setItem('webiBookUsername', username);
+        }
+        
+        function clearCurrentUser() {
+            localStorage.removeItem('webiBookUsername');
+        }
+        
+        function updateLoginUI() {
+            const username = getCurrentUser();
+            const loginFormContainer = document.getElementById('login-form-container');
+            const loggedInContainer = document.getElementById('logged-in-container');
+            const loginSection = document.getElementById('login-section');
+            
+            if (username) {
+                loginFormContainer.style.display = 'none';
+                loggedInContainer.style.display = 'block';
+                document.getElementById('username-display').textContent = username;
+                loginSection.classList.add('logged-in');
+            } else {
+                loginFormContainer.style.display = 'block';
+                loggedInContainer.style.display = 'none';
+                loginSection.classList.remove('logged-in');
+            }
+        }
+        
+        // ============================================================================
         // SAVED EVENTS
         // ============================================================================
         // Load saved events from localStorage on page load
@@ -354,6 +536,13 @@
             }
         }
         
+        // Remove an event from saved events
+        function unsaveEvent(eventId) {
+            const saved = loadSavedEvents();
+            const filtered = saved.filter(id => id !== eventId);
+            localStorage.setItem('webiBookSavedEvents', JSON.stringify(filtered));
+        }
+        
         // Check if an event is saved
         function isEventSaved(eventId) {
             const saved = loadSavedEvents();
@@ -363,44 +552,72 @@
         // ============================================================================
         // RENDER EVENTS
         // ============================================================================
+        function renderEventHTML(event, isSaved) {
+            return `
+                <div class="event">
+                    <h2 class="event-title">${event.title}</h2>
+                    <div class="event-metadata">
+                        <span class="event-topic">${event.topic}</span>
+                        <span>${event.date}</span>
+                        <span>${event.time}</span>
+                        <span>${event.duration}</span>
+                    </div>
+                    <p class="event-audience">${event.audience}</p>
+                    <div class="event-actions">
+                        <a 
+                            href="${event.url}" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            class="btn-primary"
+                            data-event-id="${event.id}"
+                            data-event-title="${event.title}"
+                            data-event-topic="${event.topic}"
+                        >
+                            Go to event
+                        </a>
+                        <button 
+                            class="btn-secondary ${isSaved ? 'saved' : ''}"
+                            data-event-id="${event.id}"
+                        >
+                            ${isSaved ? 'Saved' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
         function renderEvents() {
             const container = document.getElementById('events-list');
             const savedEvents = loadSavedEvents();
             
             container.innerHTML = events.map(event => {
                 const isSaved = savedEvents.includes(event.id);
-                
-                return `
-                    <div class="event">
-                        <h2 class="event-title">${event.title}</h2>
-                        <div class="event-metadata">
-                            <span class="event-topic">${event.topic}</span>
-                            <span>${event.date}</span>
-                            <span>${event.time}</span>
-                            <span>${event.duration}</span>
-                        </div>
-                        <p class="event-audience">${event.audience}</p>
-                        <div class="event-actions">
-                            <a 
-                                href="${event.url}" 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                class="btn-primary"
-                                data-event-id="${event.id}"
-                                data-event-title="${event.title}"
-                                data-event-topic="${event.topic}"
-                            >
-                                Go to event
-                            </a>
-                            <button 
-                                class="btn-secondary ${isSaved ? 'saved' : ''}"
-                                data-event-id="${event.id}"
-                            >
-                                ${isSaved ? 'Saved' : 'Save'}
-                            </button>
-                        </div>
+                return renderEventHTML(event, isSaved);
+            }).join('');
+            
+            // Attach event listeners after rendering
+            attachEventListeners();
+        }
+        
+        function renderSavedEvents() {
+            const container = document.getElementById('saved-events-list');
+            const savedEvents = loadSavedEvents();
+            
+            if (savedEvents.length === 0) {
+                container.innerHTML = `
+                    <div class="saved-events-empty">
+                        <p>No saved events yet</p>
+                        <small>Save events from the "All Events" tab to see them here</small>
                     </div>
                 `;
+                return;
+            }
+            
+            // Filter events to only show saved ones
+            const savedEventsData = events.filter(event => savedEvents.includes(event.id));
+            
+            container.innerHTML = savedEventsData.map(event => {
+                return renderEventHTML(event, true);
             }).join('');
             
             // Attach event listeners after rendering
@@ -435,23 +652,98 @@
             document.querySelectorAll('.btn-secondary').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const eventId = this.getAttribute('data-event-id');
+                    const isCurrentlySaved = this.classList.contains('saved');
                     
-                    // Save to localStorage
-                    saveEvent(eventId);
-                    
-                    // Update button appearance
-                    this.classList.add('saved');
-                    this.textContent = 'Saved';
-                    
-                    // Fire Google Analytics event
-                    if (typeof gtag !== 'undefined') {
-                        gtag('event', 'event_saved', {
-                            'event_id': eventId
-                        });
+                    if (isCurrentlySaved) {
+                        // Unsave the event
+                        unsaveEvent(eventId);
+                        this.classList.remove('saved');
+                        this.textContent = 'Save';
+                        
+                        // Refresh saved events view if it's active
+                        const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
+                        if (activeTab === 'saved') {
+                            renderSavedEvents();
+                        }
+                    } else {
+                        // Save the event
+                        saveEvent(eventId);
+                        this.classList.add('saved');
+                        this.textContent = 'Saved';
+                        
+                        // Fire Google Analytics event
+                        if (typeof gtag !== 'undefined') {
+                            gtag('event', 'event_saved', {
+                                'event_id': eventId
+                            });
+                        }
                     }
                 });
             });
         }
+        
+        // ============================================================================
+        // TAB NAVIGATION
+        // ============================================================================
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                if (tab.getAttribute('data-tab') === tabName) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            // Show/hide sections
+            if (tabName === 'all') {
+                document.getElementById('events-list').classList.remove('section-hidden');
+                document.getElementById('saved-events-list').classList.add('section-hidden');
+                renderEvents();
+            } else {
+                document.getElementById('events-list').classList.add('section-hidden');
+                document.getElementById('saved-events-list').classList.remove('section-hidden');
+                renderSavedEvents();
+            }
+        }
+        
+        // ============================================================================
+        // LOGIN FORM HANDLING
+        // ============================================================================
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-input').value.trim();
+            
+            if (username.length < 2) {
+                alert('Please enter a name (at least 2 characters)');
+                return;
+            }
+            
+            setCurrentUser(username);
+            updateLoginUI();
+            
+            // Clear input
+            document.getElementById('login-input').value = '';
+        });
+        
+        // Logout button
+        document.getElementById('logout-btn').addEventListener('click', function() {
+            clearCurrentUser();
+            updateLoginUI();
+            // Switch to all events tab when logging out
+            switchTab('all');
+        });
+        
+        // ============================================================================
+        // TAB NAVIGATION HANDLERS
+        // ============================================================================
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                const tabName = this.getAttribute('data-tab');
+                switchTab(tabName);
+            });
+        });
         
         // ============================================================================
         // EMAIL FORM HANDLING
@@ -479,6 +771,9 @@
         // ============================================================================
         // INITIALIZE
         // ============================================================================
+        // Initialize login UI
+        updateLoginUI();
+        
         // Render events when page loads
         renderEvents();
         
