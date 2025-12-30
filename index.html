@@ -1,15 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-7M00D9J3XW"></script>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-TJXVV3ZR');</script>
+    <!-- End Google Tag Manager -->
+    
+    <!-- Google tag (gtag.js) - Load before consent manager to ensure it initializes -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-
       gtag('config', 'G-7M00D9J3XW');
     </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-7M00D9J3XW"></script>
     
     <!-- Vercel Analytics - DISABLED (Only works on Vercel, not Render) -->
     <!-- Uncomment this if you deploy to Vercel instead of Render -->
@@ -28,12 +35,16 @@
     </script>
     -->
     
-    <!-- Consent Manager - may block GA until consent is given -->
+    <!-- Consent Manager - TEMPORARILY DISABLED for testing GA -->
+    <!-- The consent manager with autoblocking was preventing GA from tracking -->
+    <!-- Uncomment below if you need consent management, but configure it to allow GA -->
+    <!--
     <script type="text/javascript" data-cmp-ab="1" 
     src="https://cdn.consentmanager.net/delivery/autoblocking/a1870cb932810.js" 
     data-cmp-host="a.delivery.consentmanager.net" data-cmp-cdn="cdn.consentmanager.net" 
     data-cmp-codesrc="16">
     </script>
+    -->
     
     <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -583,6 +594,11 @@
     </style>
 </head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TJXVV3ZR"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    
     <header>
         <h1>Live learning events happening this week — handpicked</h1>
         <p class="subtitle">No hosting. No ads. Just links to live sessions worth attending.</p>
