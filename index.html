@@ -10,6 +10,23 @@
       gtag('config', 'G-7M00D9J3XW');
     </script>
     
+    <!-- Vercel Analytics - Web Analytics for static HTML sites -->
+    <!-- Tracks page views automatically when deployed on Vercel -->
+    <!-- Note: Make sure Web Analytics is enabled in your Vercel project settings -->
+    <script>
+      (function() {
+        // Only load on production (not localhost)
+        if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
+          var va = document.createElement('script');
+          va.type = 'text/javascript';
+          va.async = true;
+          va.src = 'https://va.vercel-scripts.com/v1/script.js';
+          var s = document.getElementsByTagName('script')[0];
+          s.parentNode.insertBefore(va, s);
+        }
+      })();
+    </script>
+    
     <!-- Consent Manager - may block GA until consent is given -->
     <script type="text/javascript" data-cmp-ab="1" 
     src="https://cdn.consentmanager.net/delivery/autoblocking/a1870cb932810.js" 
