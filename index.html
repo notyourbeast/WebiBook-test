@@ -776,6 +776,27 @@
                 </div>
             </div>
             
+            <!-- Event Clicks Statistics -->
+            <div class="dashboard-section">
+                <h3>Event Clicks (Most Popular Events)</h3>
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Event ID</th>
+                                <th>Event Title</th>
+                                <th>Topic</th>
+                                <th>Total Clicks</th>
+                                <th>Last Clicked</th>
+                            </tr>
+                        </thead>
+                        <tbody id="event-clicks-table-body">
+                            <tr><td colspan="5">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
             <!-- Visit Statistics -->
             <div class="dashboard-section">
                 <h3>Visit Statistics</h3>
@@ -795,6 +816,42 @@
     </div>
     
     <script>
+        // ============================================================================
+        // API CONFIGURATION
+        // ============================================================================
+        // API base URL - automatically detects if running locally or on server
+        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000/api'
+            : '/api'; // Use relative path for production (same domain)
+        
+        // Helper function to call API
+        async function callAPI(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+                
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                // Return null on error - app will continue to work with localStorage fallback
+                return null;
+            }
+        }
+        
         // ============================================================================
         // EVENTS DATA
         // ============================================================================
@@ -910,22 +967,41 @@
             return saved ? JSON.parse(saved) : [];
         }
         
-        // Save an event ID to localStorage (user-specific)
-        function saveEvent(eventId) {
+        // Save an event ID to localStorage (user-specific) and backend
+        async function saveEvent(eventId) {
+            const userEmail = getCurrentUser();
             const key = getSavedEventsKey();
             const saved = loadSavedEvents();
+            
             if (!saved.includes(eventId)) {
                 saved.push(eventId);
                 localStorage.setItem(key, JSON.stringify(saved));
+                
+                // Also save to backend if user is logged in
+                if (userEmail) {
+                    await callAPI('/events/save', 'POST', {
+                        email: userEmail,
+                        eventId: eventId
+                    });
+                }
             }
         }
         
-        // Remove an event from saved events (user-specific)
-        function unsaveEvent(eventId) {
+        // Remove an event from saved events (user-specific) and backend
+        async function unsaveEvent(eventId) {
+            const userEmail = getCurrentUser();
             const key = getSavedEventsKey();
             const saved = loadSavedEvents();
             const filtered = saved.filter(id => id !== eventId);
             localStorage.setItem(key, JSON.stringify(filtered));
+            
+            // Also update backend if user is logged in
+            if (userEmail) {
+                await callAPI('/events/unsave', 'POST', {
+                    email: userEmail,
+                    eventId: eventId
+                });
+            }
         }
         
         // Check if an event is saved (user-specific)
@@ -1060,6 +1136,13 @@
                         });
                     }
                     
+                    // Track event click in backend
+                    callAPI('/events/click', 'POST', {
+                        eventId: eventId,
+                        eventTitle: eventTitle,
+                        eventTopic: eventTopic
+                    });
+                    
                     // Link will open in new tab (target="_blank" handles this)
                 });
             });
@@ -1076,15 +1159,16 @@
                     if (isCurrentlySaved) {
                         // Unsave the event (only if logged in)
                         if (userEmail) {
-                            unsaveEvent(eventId);
-                            this.classList.remove('saved');
-                            this.textContent = 'Save';
-                            
-                            // Refresh saved events view if it's active
-                            const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
-                            if (activeTab === 'saved') {
-                                renderSavedEvents();
-                            }
+                            unsaveEvent(eventId).then(() => {
+                                this.classList.remove('saved');
+                                this.textContent = 'Save';
+                                
+                                // Refresh saved events view if it's active
+                                const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
+                                if (activeTab === 'saved') {
+                                    renderSavedEvents();
+                                }
+                            });
                         }
                     } else {
                         // If not logged in, show login prompt
@@ -1098,9 +1182,10 @@
                         }
                         
                         // Save the event (user is logged in)
-                        saveEvent(eventId);
-                        this.classList.add('saved');
-                        this.textContent = 'Saved';
+                        saveEvent(eventId).then(() => {
+                            this.classList.add('saved');
+                            this.textContent = 'Saved';
+                        });
                         
                         // Fire Google Analytics event
                         if (typeof gtag !== 'undefined') {
@@ -1206,7 +1291,7 @@
         // ============================================================================
         // RETURN VISIT TRACKING (Market Research)
         // ============================================================================
-        function trackReturnVisit() {
+        async function trackReturnVisit() {
             const firstVisit = localStorage.getItem('webiBookFirstVisit');
             const visitCount = parseInt(localStorage.getItem('webiBookVisitCount') || '0');
             const lastVisit = localStorage.getItem('webiBookLastVisit');
@@ -1225,6 +1310,12 @@
                         'timestamp': now
                     });
                 }
+                
+                // Send to backend
+                await callAPI('/visits', 'POST', {
+                    isReturning: false,
+                    visitCount: 1
+                });
                 
                 return { isReturning: false, visitCount: 1 };
             } else {
@@ -1245,25 +1336,32 @@
                     });
                 }
                 
+                // Send to backend
+                await callAPI('/visits', 'POST', {
+                    isReturning: true,
+                    visitCount: newCount,
+                    daysSince: daysSince
+                });
+                
                 return { isReturning: true, visitCount: newCount, daysSince: daysSince };
             }
         }
         
         let visitInfoCache = null;
         
-        function getVisitInfo() {
+        async function getVisitInfo() {
             if (!visitInfoCache) {
-                visitInfoCache = trackReturnVisit();
+                visitInfoCache = await trackReturnVisit();
             }
             return visitInfoCache;
         }
         
-        function updateVisitorStatus() {
-            const visitInfo = getVisitInfo();
+        async function updateVisitorStatus() {
+            const visitInfo = await getVisitInfo();
             const statusElement = document.getElementById('visitor-status');
             
             if (statusElement) {
-                if (visitInfo.isReturning) {
+                if (visitInfo && visitInfo.isReturning) {
                     if (visitInfo.daysSince === 0) {
                         statusElement.textContent = 'Welcome back! You visited earlier today.';
                     } else if (visitInfo.daysSince === 1) {
@@ -1308,7 +1406,7 @@
         // ============================================================================
         // EMAIL FORM HANDLING (Weekly Reminders)
         // ============================================================================
-        document.getElementById('email-form').addEventListener('submit', function(e) {
+        document.getElementById('email-form').addEventListener('submit', async function(e) {
             e.preventDefault(); // Prevent page reload
             
             const email = document.getElementById('email-input').value.trim();
@@ -1326,12 +1424,14 @@
                 localStorage.setItem('webiBookWeeklyEmails', JSON.stringify(weeklyEmails));
             }
             
-            // Log to console (no backend)
+            // Also save to backend
+            await callAPI('/emails', 'POST', { email: email });
+            
             console.log('Weekly reminder email submitted:', email);
             
             // Fire Google Analytics event with more context
-            const visitInfo = getVisitInfo();
-            if (typeof gtag !== 'undefined') {
+            const visitInfo = await getVisitInfo();
+            if (typeof gtag !== 'undefined' && visitInfo) {
                 gtag('event', 'weekly_reminder_signup', {
                     'email': email,
                     'is_returning_visitor': visitInfo.isReturning,
@@ -1350,8 +1450,8 @@
         // Clear old test data (migration from old storage format)
         clearOldTestData();
         
-        // Track return visits and update visitor status
-        updateVisitorStatus();
+        // Track return visits and update visitor status (async, don't block)
+        updateVisitorStatus().catch(console.error);
         
         // Track time spent on page
         trackTimeOnPage();
@@ -1429,32 +1529,67 @@
             // Regular users (no ?admin in URL) see nothing - completely hidden
         }
         
-        // Load and display dashboard data
-        function loadDashboardData() {
-            // Get all data
-            const weeklyEmails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
-            const savedEventsByUser = {};
+        // Load and display dashboard data from backend API
+        async function loadDashboardData() {
+            // Show loading state
+            document.getElementById('metric-emails').textContent = '...';
+            document.getElementById('metric-users').textContent = '...';
+            document.getElementById('metric-saved').textContent = '...';
+            document.getElementById('metric-returns').textContent = '...';
+            document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>';
+            document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>';
+            
+            // Try to fetch from backend API first
+            const apiData = await callAPI('/data');
+            
+            let weeklyEmails = [];
+            let savedEventsByUser = {};
             let totalSavedEvents = 0;
             let firstVisits = 0;
             let returnVisits = 0;
+            let eventClicks = {};
             
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('webiBookSavedEvents_')) {
-                    const email = key.replace('webiBookSavedEvents_', '');
-                    const events = JSON.parse(localStorage.getItem(key) || '[]');
-                    if (events.length > 0) {
-                        savedEventsByUser[email] = events;
-                        totalSavedEvents += events.length;
+            if (apiData) {
+                // Use data from backend API (aggregated from all users/devices)
+                // Handle both old format (array of strings) and new format (array of objects)
+                if (apiData.weeklyEmails && apiData.weeklyEmails.length > 0) {
+                    if (typeof apiData.weeklyEmails[0] === 'string') {
+                        weeklyEmails = apiData.weeklyEmails;
+                    } else {
+                        weeklyEmails = apiData.weeklyEmails.map(item => item.email || item);
                     }
                 }
-                if (key === 'webiBookFirstVisit') {
-                    firstVisits = 1; // At least one first visit exists
+                
+                savedEventsByUser = apiData.savedEvents || {};
+                totalSavedEvents = Object.values(savedEventsByUser).reduce((sum, events) => sum + events.length, 0);
+                eventClicks = apiData.eventClicks || {};
+                
+                // Visit statistics from backend
+                const visitStats = apiData.visitStats || {};
+                firstVisits = visitStats.firstVisits || 0;
+                returnVisits = visitStats.returnVisits || 0;
+            } else {
+                // Fallback to localStorage if API is unavailable (for backward compatibility)
+                console.warn('Backend API unavailable, using localStorage data (limited to this device)');
+                weeklyEmails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
+                
+                Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('webiBookSavedEvents_')) {
+                        const email = key.replace('webiBookSavedEvents_', '');
+                        const events = JSON.parse(localStorage.getItem(key) || '[]');
+                        if (events.length > 0) {
+                            savedEventsByUser[email] = events;
+                            totalSavedEvents += events.length;
+                        }
+                    }
+                });
+                
+                if (localStorage.getItem('webiBookFirstVisit')) {
+                    firstVisits = 1;
                 }
-                if (key === 'webiBookVisitCount') {
-                    const count = parseInt(localStorage.getItem(key) || '0');
-                    if (count > 1) returnVisits = count - 1;
-                }
-            });
+                const visitCount = parseInt(localStorage.getItem('webiBookVisitCount') || '0');
+                if (visitCount > 1) returnVisits = visitCount - 1;
+            }
             
             // Update metrics
             document.getElementById('metric-emails').textContent = weeklyEmails.length;
@@ -1470,10 +1605,13 @@
             const emailsTableBody = document.getElementById('emails-table-body');
             if (weeklyEmails.length > 0) {
                 emailsTableBody.innerHTML = weeklyEmails.map((email, index) => {
+                    // Handle both string and object formats
+                    const emailStr = typeof email === 'string' ? email : (email.email || email);
+                    const timestamp = email.timestamp ? new Date(email.timestamp).toLocaleDateString() : new Date().toLocaleDateString();
                     return `<tr>
                         <td>${index + 1}</td>
-                        <td>${email}</td>
-                        <td>${new Date().toLocaleDateString()}</td>
+                        <td>${emailStr}</td>
+                        <td>${timestamp}</td>
                     </tr>`;
                 }).join('');
             } else {
@@ -1494,6 +1632,24 @@
                 }).join('');
             } else {
                 savedEventsTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">No saved events yet</td></tr>';
+            }
+            
+            // Populate event clicks table
+            const eventClicksTableBody = document.getElementById('event-clicks-table-body');
+            if (eventClicks && Object.keys(eventClicks).length > 0) {
+                const clicksArray = Object.values(eventClicks).sort((a, b) => b.count - a.count);
+                eventClicksTableBody.innerHTML = clicksArray.map(click => {
+                    const lastClicked = click.lastClicked ? new Date(click.lastClicked).toLocaleString() : 'Never';
+                    return `<tr>
+                        <td>${click.id}</td>
+                        <td>${click.title || click.id}</td>
+                        <td>${click.topic || 'N/A'}</td>
+                        <td><strong>${click.count}</strong></td>
+                        <td>${lastClicked}</td>
+                    </tr>`;
+                }).join('');
+            } else {
+                eventClicksTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">No event clicks tracked yet</td></tr>';
             }
             
             // Wait for Chart.js to be available, then create charts
@@ -1677,33 +1833,58 @@
             });
         }
         
-        // Copy all emails
-        function copyAllEmails() {
-            const emails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
+        // Copy all emails (from backend API)
+        async function copyAllEmails() {
+            // Try to fetch from backend API first
+            const apiData = await callAPI('/data');
+            
+            let emails;
+            if (apiData && apiData.weeklyEmails) {
+                // Handle both old format (array of strings) and new format (array of objects)
+                if (typeof apiData.weeklyEmails[0] === 'string') {
+                    emails = apiData.weeklyEmails;
+                } else {
+                    emails = apiData.weeklyEmails.map(item => item.email || item);
+                }
+            } else {
+                // Fallback to localStorage
+                emails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
+            }
+            
             const emailList = emails.join('\n');
             navigator.clipboard.writeText(emailList).then(() => {
                 alert(`Copied ${emails.length} emails to clipboard!`);
             });
         }
         
-        // Export all data
-        function exportAllData() {
-            const allData = {
-                weeklyEmails: JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]'),
-                savedEvents: {},
-                visitStats: {
-                    firstVisit: localStorage.getItem('webiBookFirstVisit'),
-                    visitCount: localStorage.getItem('webiBookVisitCount'),
-                    lastVisit: localStorage.getItem('webiBookLastVisit')
-                }
-            };
+        // Export all data (from backend API)
+        async function exportAllData() {
+            // Try to fetch from backend API first
+            const apiData = await callAPI('/data');
             
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('webiBookSavedEvents_')) {
-                    const email = key.replace('webiBookSavedEvents_', '');
-                    allData.savedEvents[email] = JSON.parse(localStorage.getItem(key) || '[]');
-                }
-            });
+            let allData;
+            if (apiData) {
+                // Use aggregated data from backend
+                allData = apiData;
+            } else {
+                // Fallback to localStorage
+                allData = {
+                    weeklyEmails: JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]'),
+                    savedEvents: {},
+                    visitStats: {
+                        firstVisit: localStorage.getItem('webiBookFirstVisit'),
+                        visitCount: localStorage.getItem('webiBookVisitCount'),
+                        lastVisit: localStorage.getItem('webiBookLastVisit')
+                    }
+                };
+                
+                Object.keys(localStorage).forEach(key => {
+                    if (key.startsWith('webiBookSavedEvents_')) {
+                        const email = key.replace('webiBookSavedEvents_', '');
+                        allData.savedEvents[email] = JSON.parse(localStorage.getItem(key) || '[]');
+                    }
+                });
+            }
             
             const dataStr = JSON.stringify(allData, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
