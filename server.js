@@ -21,21 +21,53 @@ app.use(express.json());
 async function initializeDataFile() {
     try {
         await fs.access(DATA_FILE);
+        // File exists - check if it needs migration
+        const existingData = await readData();
+        
+        // Migrate old data structure to new one
+        if (!existingData.userSessions) {
+            existingData.userSessions = {};
+        }
+        if (!existingData.visitStats) {
+            existingData.visitStats = {
+                firstVisits: 0,
+                returnVisits: 0,
+                totalVisits: 0,
+                uniqueUsers: 0,
+                lastVisit: null
+            };
+        } else {
+            // Ensure new fields exist
+            existingData.visitStats.uniqueUsers = existingData.visitStats.uniqueUsers || 0;
+        }
+        
+        // If we have old visit data but no user sessions, estimate unique users
+        if (existingData.visitStats.totalVisits > 0 && existingData.visitStats.uniqueUsers === 0) {
+            // Rough estimate: assume 30% of visits are unique users (adjust based on your data)
+            existingData.visitStats.uniqueUsers = Math.max(1, Math.round(existingData.visitStats.totalVisits * 0.3));
+        }
+        
+        await writeData(existingData);
+        console.log('✅ Data file migrated to new structure');
+        
     } catch (error) {
-        // File doesn't exist, create it with empty structure
+        // File doesn't exist, create it with new structure
         const initialData = {
             weeklyEmails: [],
             savedEvents: {},
             visitStats: {
                 firstVisits: 0,
                 returnVisits: 0,
-                totalVisits: 0
+                totalVisits: 0,
+                uniqueUsers: 0,
+                lastVisit: null
             },
+            userSessions: {},
             eventClicks: {},
             lastUpdated: new Date().toISOString()
         };
         await fs.writeFile(DATA_FILE, JSON.stringify(initialData, null, 2));
-        console.log('✅ Created initial data file');
+        console.log('✅ Created initial data file with user tracking');
     }
 }
 
@@ -43,7 +75,28 @@ async function initializeDataFile() {
 async function readData() {
     try {
         const data = await fs.readFile(DATA_FILE, 'utf8');
-        return JSON.parse(data);
+        const parsedData = JSON.parse(data);
+        
+        // Backward compatibility - add missing fields
+        if (!parsedData.userSessions) parsedData.userSessions = {};
+        if (!parsedData.visitStats) {
+            parsedData.visitStats = {
+                firstVisits: 0,
+                returnVisits: 0,
+                totalVisits: 0,
+                uniqueUsers: 0,
+                lastVisit: null
+            };
+        } else {
+            // Ensure all fields exist
+            parsedData.visitStats.firstVisits = parsedData.visitStats.firstVisits || 0;
+            parsedData.visitStats.returnVisits = parsedData.visitStats.returnVisits || 0;
+            parsedData.visitStats.totalVisits = parsedData.visitStats.totalVisits || 0;
+            parsedData.visitStats.uniqueUsers = parsedData.visitStats.uniqueUsers || 0;
+            parsedData.visitStats.lastVisit = parsedData.visitStats.lastVisit || null;
+        }
+        
+        return parsedData;
     } catch (error) {
         console.error('Error reading data file:', error);
         return {
@@ -52,8 +105,11 @@ async function readData() {
             visitStats: {
                 firstVisits: 0,
                 returnVisits: 0,
-                totalVisits: 0
+                totalVisits: 0,
+                uniqueUsers: 0,
+                lastVisit: null
             },
+            userSessions: {},
             eventClicks: {},
             lastUpdated: new Date().toISOString()
         };
@@ -103,8 +159,17 @@ app.post('/api/emails', async (req, res) => {
         
         const data = await readData();
         
+        // Check if email already exists (supporting both string and object)
+        const emailExists = data.weeklyEmails.some(entry => {
+            if (typeof entry === 'string') {
+                return entry === email;
+            } else {
+                return entry.email === email;
+            }
+        });
+        
         // Add email if not already present
-        if (!data.weeklyEmails.includes(email)) {
+        if (!emailExists) {
             data.weeklyEmails.push({
                 email: email,
                 timestamp: new Date().toISOString()
@@ -211,37 +276,149 @@ app.post('/api/events/click', async (req, res) => {
 // Track visit statistics
 app.post('/api/visits', async (req, res) => {
     try {
-        const { isReturning, visitCount, daysSince } = req.body;
+        const { userId, isNewUser } = req.body;
         const data = await readData();
         
-        // Initialize visit stats if needed
+        // Initialize structures if needed
         if (!data.visitStats) {
             data.visitStats = {
                 firstVisits: 0,
                 returnVisits: 0,
-                totalVisits: 0
+                totalVisits: 0,
+                uniqueUsers: 0,
+                lastVisit: null
             };
         }
         
-        // Track visit
-        const now = new Date().toISOString();
-        if (!isReturning) {
-            // First visit
-            data.visitStats.firstVisits = (data.visitStats.firstVisits || 0) + 1;
-        } else {
-            // Return visit
-            data.visitStats.returnVisits = (data.visitStats.returnVisits || 0) + 1;
+        if (!data.userSessions) {
+            data.userSessions = {};
         }
         
-        data.visitStats.totalVisits = (data.visitStats.totalVisits || 0) + 1;
-        data.visitStats.lastVisit = now;
+        // Generate or retrieve user ID
+        let currentUserId = userId;
+        if (!currentUserId) {
+            currentUserId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Track unique user
+        let isFirstVisit = false;
+        if (isNewUser && !data.userSessions[currentUserId]) {
+            data.userSessions[currentUserId] = {
+                firstVisit: new Date().toISOString(),
+                visits: 0,
+                lastVisit: null
+            };
+            data.visitStats.uniqueUsers = Object.keys(data.userSessions).length;
+            isFirstVisit = true;
+        }
+        
+        // Update user session
+        if (data.userSessions[currentUserId]) {
+            data.userSessions[currentUserId].visits += 1;
+            data.userSessions[currentUserId].lastVisit = new Date().toISOString();
+        } else {
+            // User exists but wasn't in sessions (migration case)
+            data.userSessions[currentUserId] = {
+                firstVisit: new Date().toISOString(),
+                visits: 1,
+                lastVisit: new Date().toISOString()
+            };
+            data.visitStats.uniqueUsers = Object.keys(data.userSessions).length;
+        }
+        
+        // Update aggregate stats correctly
+        if (isFirstVisit) {
+            data.visitStats.firstVisits += 1;
+        } else {
+            data.visitStats.returnVisits += 1;
+        }
+        
+        data.visitStats.totalVisits += 1;
+        data.visitStats.lastVisit = new Date().toISOString();
         
         await writeData(data);
         
-        res.json({ success: true, message: 'Visit tracked' });
+        res.json({ 
+            success: true, 
+            message: 'Visit tracked',
+            userId: currentUserId,
+            isFirstVisit: isFirstVisit
+        });
     } catch (error) {
         console.error('Error tracking visit:', error);
         res.status(500).json({ error: 'Failed to track visit' });
+    }
+});
+
+// Get user retention analytics
+app.get('/api/analytics/retention', async (req, res) => {
+    try {
+        const data = await readData();
+        
+        const userSessions = data.userSessions || {};
+        const users = Object.values(userSessions);
+        
+        // Calculate retention metrics
+        const now = new Date();
+        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+        
+        // Active users
+        const dailyActive = users.filter(user => 
+            user.lastVisit && new Date(user.lastVisit) > oneDayAgo
+        ).length;
+        
+        const weeklyActive = users.filter(user => 
+            user.lastVisit && new Date(user.lastVisit) > sevenDaysAgo
+        ).length;
+        
+        const monthlyActive = users.filter(user => 
+            user.lastVisit && new Date(user.lastVisit) > thirtyDaysAgo
+        ).length;
+        
+        // Retention cohorts
+        const cohorts = {};
+        users.forEach(user => {
+            const firstVisitDate = new Date(user.firstVisit).toISOString().split('T')[0];
+            if (!cohorts[firstVisitDate]) {
+                cohorts[firstVisitDate] = {
+                    date: firstVisitDate,
+                    totalUsers: 0,
+                    returnedDay1: 0,
+                    returnedDay7: 0,
+                    returnedDay30: 0
+                };
+            }
+            cohorts[firstVisitDate].totalUsers += 1;
+            
+            // Check if returned within timeframes
+            const daysSinceFirst = Math.floor((now - new Date(user.firstVisit)) / (1000 * 60 * 60 * 24));
+            const returnedLater = user.visits > 1;
+            
+            if (returnedLater && daysSinceFirst >= 1) cohorts[firstVisitDate].returnedDay1 += 1;
+            if (returnedLater && daysSinceFirst >= 7) cohorts[firstVisitDate].returnedDay7 += 1;
+            if (returnedLater && daysSinceFirst >= 30) cohorts[firstVisitDate].returnedDay30 += 1;
+        });
+        
+        res.json({
+            success: true,
+            metrics: {
+                totalUniqueUsers: users.length,
+                dailyActiveUsers: dailyActive,
+                weeklyActiveUsers: weeklyActive,
+                monthlyActiveUsers: monthlyActive,
+                totalVisits: data.visitStats.totalVisits || 0,
+                averageVisitsPerUser: users.length > 0 ? (data.visitStats.totalVisits / users.length).toFixed(2) : 0,
+                returnRate: users.length > 0 ? 
+                    ((users.filter(u => u.visits > 1).length / users.length) * 100).toFixed(1) + '%' : '0%'
+            },
+            cohorts: Object.values(cohorts).slice(-10).reverse(), // Last 10 cohorts, newest first
+            userSessions: userSessions
+        });
+    } catch (error) {
+        console.error('Error getting retention analytics:', error);
+        res.status(500).json({ error: 'Failed to get analytics' });
     }
 });
 
@@ -286,4 +463,3 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
-
