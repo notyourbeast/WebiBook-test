@@ -1,130 +1,102 @@
 #!/usr/bin/env node
 /**
- * WebiBook Analytics Backend Server
- * Collects and aggregates data from all users across devices
+ * WebiBook Analytics Backend Server - MongoDB Version
+ * Multi-user, multi-device system
  */
 
+require('dotenv').config();
+
+// Debug: Check if env variables are loaded
+console.log('=== Environment Variables Check ===');
+console.log('ADMIN_PASSWORD:', process.env.ADMIN_PASSWORD ? '✓ Loaded' : '✗ NOT FOUND');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓ Loaded' : '✗ NOT FOUND');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✓ Loaded' : '✗ NOT FOUND');
+console.log('PORT:', process.env.PORT || 3000);
+console.log('==================================\n');
+
 const express = require('express');
-const fs = require('fs').promises;
-const path = require('path');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+const geoip = require('geoip-lite');
+
+// Database and Models - FIXED PATHS
+const connectDB = require('./config/database');
+const User = require('./models/User');  // FIXED: Removed ../
+const Event = require('./models/Event');
+const EmailSubscription = require('./models/EventSubscription');
+const Visit = require('./models/Visit');
+const EventClick = require('./models/EventClick');
+
+// Middleware
+const auth = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'webiBook-data.json');
+
+// Connect to MongoDB
+connectDB();
 
 // Middleware
-app.use(cors()); // Allow cross-origin requests
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
-// Initialize data file if it doesn't exist
-async function initializeDataFile() {
+// Get client IP and location
+app.use((req, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
+    const geo = geoip.lookup(ip);
+    
+    req.clientInfo = {
+        ip,
+        userAgent: req.headers['user-agent'],
+        geo: geo ? {
+            country: geo.country,
+            region: geo.region,
+            city: geo.city,
+            timezone: geo.timezone,
+            ll: geo.ll
+        } : null,
+        referrer: req.headers.referer
+    };
+    next();
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+async function getOrCreateUser(email, deviceInfo, location) {
     try {
-        await fs.access(DATA_FILE);
-        // File exists - check if it needs migration
-        const existingData = await readData();
+        // Check if user exists
+        let user = await User.findOne({ email: email.toLowerCase() });
         
-        // Migrate old data structure to new one
-        if (!existingData.userSessions) {
-            existingData.userSessions = {};
-        }
-        if (!existingData.visitStats) {
-            existingData.visitStats = {
-                firstVisits: 0,
-                returnVisits: 0,
-                totalVisits: 0,
-                uniqueUsers: 0,
-                lastVisit: null
-            };
+        if (!user) {
+            // Create new user
+            user = new User({
+                email: email.toLowerCase(),
+                deviceInfo,
+                location,
+                firstVisit: new Date(),
+                lastVisit: new Date(),
+                visitCount: 1
+            });
+            await user.save();
         } else {
-            // Ensure new fields exist
-            existingData.visitStats.uniqueUsers = existingData.visitStats.uniqueUsers || 0;
+            // Update existing user
+            user.visitCount += 1;
+            user.lastVisit = new Date();
+            user.deviceInfo = { ...user.deviceInfo, ...deviceInfo };
+            await user.save();
         }
         
-        // If we have old visit data but no user sessions, estimate unique users
-        if (existingData.visitStats.totalVisits > 0 && existingData.visitStats.uniqueUsers === 0) {
-            // Rough estimate: assume 30% of visits are unique users (adjust based on your data)
-            existingData.visitStats.uniqueUsers = Math.max(1, Math.round(existingData.visitStats.totalVisits * 0.3));
-        }
-        
-        await writeData(existingData);
-        console.log('✅ Data file migrated to new structure');
-        
+        return user;
     } catch (error) {
-        // File doesn't exist, create it with new structure
-        const initialData = {
-            weeklyEmails: [],
-            savedEvents: {},
-            visitStats: {
-                firstVisits: 0,
-                returnVisits: 0,
-                totalVisits: 0,
-                uniqueUsers: 0,
-                lastVisit: null
-            },
-            userSessions: {},
-            eventClicks: {},
-            lastUpdated: new Date().toISOString()
-        };
-        await fs.writeFile(DATA_FILE, JSON.stringify(initialData, null, 2));
-        console.log('✅ Created initial data file with user tracking');
-    }
-}
-
-// Read data from file
-async function readData() {
-    try {
-        const data = await fs.readFile(DATA_FILE, 'utf8');
-        const parsedData = JSON.parse(data);
-        
-        // Backward compatibility - add missing fields
-        if (!parsedData.userSessions) parsedData.userSessions = {};
-        if (!parsedData.visitStats) {
-            parsedData.visitStats = {
-                firstVisits: 0,
-                returnVisits: 0,
-                totalVisits: 0,
-                uniqueUsers: 0,
-                lastVisit: null
-            };
-        } else {
-            // Ensure all fields exist
-            parsedData.visitStats.firstVisits = parsedData.visitStats.firstVisits || 0;
-            parsedData.visitStats.returnVisits = parsedData.visitStats.returnVisits || 0;
-            parsedData.visitStats.totalVisits = parsedData.visitStats.totalVisits || 0;
-            parsedData.visitStats.uniqueUsers = parsedData.visitStats.uniqueUsers || 0;
-            parsedData.visitStats.lastVisit = parsedData.visitStats.lastVisit || null;
-        }
-        
-        return parsedData;
-    } catch (error) {
-        console.error('Error reading data file:', error);
-        return {
-            weeklyEmails: [],
-            savedEvents: {},
-            visitStats: {
-                firstVisits: 0,
-                returnVisits: 0,
-                totalVisits: 0,
-                uniqueUsers: 0,
-                lastVisit: null
-            },
-            userSessions: {},
-            eventClicks: {},
-            lastUpdated: new Date().toISOString()
-        };
-    }
-}
-
-// Write data to file
-async function writeData(data) {
-    try {
-        data.lastUpdated = new Date().toISOString();
-        await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
-        return true;
-    } catch (error) {
-        console.error('Error writing data file:', error);
-        return false;
+        console.error('Error in getOrCreateUser:', error);
+        throw error;
     }
 }
 
@@ -134,332 +106,722 @@ async function writeData(data) {
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        database: 'MongoDB'
+    });
 });
 
-// Get all aggregated data (for admin dashboard)
-app.get('/api/data', async (req, res) => {
+// Register/Login User - Email only
+app.post('/api/auth/register', async (req, res) => {
     try {
-        const data = await readData();
-        res.json(data);
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        res.status(500).json({ error: 'Failed to fetch data' });
-    }
-});
-
-// Submit weekly reminder email
-app.post('/api/emails', async (req, res) => {
-    try {
-        const { email } = req.body;
+        const { email, name } = req.body;
         
         if (!email || !email.includes('@')) {
-            return res.status(400).json({ error: 'Invalid email address' });
+            return res.status(400).json({ error: 'Valid email is required' });
         }
         
-        const data = await readData();
+        // Check if user exists
+        let user = await User.findOne({ email: email.toLowerCase() });
         
-        // Check if email already exists (supporting both string and object)
-        const emailExists = data.weeklyEmails.some(entry => {
-            if (typeof entry === 'string') {
-                return entry === email;
-            } else {
-                return entry.email === email;
-            }
+        if (user) {
+            // User exists, update last login
+            user.lastVisit = new Date();
+            user.visitCount += 1;
+            await user.save();
+            
+            const token = auth.generateToken(user._id);
+            
+            return res.json({
+                success: true,
+                message: 'Login successful',
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    name: user.name,
+                    savedEvents: user.savedEvents,
+                    visitCount: user.visitCount
+                },
+                token
+            });
+        }
+        
+        // Create new user (email-only, no password)
+        user = new User({
+            email: email.toLowerCase(),
+            name: name || email.split('@')[0],
+            deviceInfo: {
+                userAgent: req.clientInfo.userAgent,
+                browser: req.clientInfo.userAgent?.match(/(chrome|firefox|safari|edge)/i)?.[0] || 'unknown',
+                os: req.clientInfo.userAgent?.match(/(windows|mac os|linux|android|ios)/i)?.[0] || 'unknown',
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            location: {
+                ipAddress: req.clientInfo.ip,
+                country: req.clientInfo.geo?.country,
+                city: req.clientInfo.geo?.city
+            },
+            firstVisit: new Date(),
+            lastVisit: new Date(),
+            visitCount: 1
         });
         
-        // Add email if not already present
-        if (!emailExists) {
-            data.weeklyEmails.push({
-                email: email,
-                timestamp: new Date().toISOString()
-            });
-            await writeData(data);
-        }
+        await user.save();
         
-        res.json({ success: true, message: 'Email saved' });
+        const token = auth.generateToken(user._id);
+        
+        res.status(201).json({
+            success: true,
+            message: 'Registration successful',
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                savedEvents: user.savedEvents,
+                visitCount: user.visitCount
+            },
+            token
+        });
     } catch (error) {
-        console.error('Error saving email:', error);
-        res.status(500).json({ error: 'Failed to save email' });
+        console.error('Registration error:', error);
+        res.status(500).json({ 
+            error: 'Registration failed',
+            details: error.message 
+        });
     }
 });
 
-// Save event for a user
-app.post('/api/events/save', async (req, res) => {
+// Get user profile
+app.get('/api/auth/profile', auth.verifyToken, async (req, res) => {
     try {
-        const { email, eventId } = req.body;
-        
-        if (!email || !eventId) {
-            return res.status(400).json({ error: 'Email and eventId are required' });
-        }
-        
-        const data = await readData();
-        
-        // Initialize user's saved events array if needed
-        if (!data.savedEvents[email]) {
-            data.savedEvents[email] = [];
-        }
-        
-        // Add event if not already saved
-        if (!data.savedEvents[email].includes(eventId)) {
-            data.savedEvents[email].push(eventId);
-            await writeData(data);
-        }
-        
-        res.json({ success: true, message: 'Event saved' });
+        res.json({
+            success: true,
+            user: {
+                id: req.user._id,
+                email: req.user.email,
+                name: req.user.name,
+                savedEvents: req.user.savedEvents,
+                visitCount: req.user.visitCount
+            }
+        });
     } catch (error) {
-        console.error('Error saving event:', error);
+        console.error('Profile error:', error);
+        res.status(500).json({ error: 'Failed to get profile' });
+    }
+});
+
+// ============================================================================
+// EVENTS MANAGEMENT
+// ============================================================================
+
+// Get all events
+app.get('/api/events', async (req, res) => {
+    try {
+        const events = await Event.find({ isActive: true })
+            .sort({ date: 1 })
+            .select('-__v');
+        
+        res.json({
+            success: true,
+            events
+        });
+    } catch (error) {
+        console.error('Get events error:', error);
+        res.status(500).json({ error: 'Failed to fetch events' });
+    }
+});
+
+// Save event for user
+app.post('/api/events/save', auth.verifyToken, async (req, res) => {
+    try {
+        const { eventId } = req.body;
+        
+        if (!eventId) {
+            return res.status(400).json({ error: 'Event ID is required' });
+        }
+        
+        // Check if event exists
+        const event = await Event.findOne({ eventId });
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        
+        // Check if already saved
+        const alreadySaved = req.user.savedEvents.some(
+            saved => saved.eventId === eventId
+        );
+        
+        if (!alreadySaved) {
+            // Add to saved events
+            req.user.savedEvents.push({
+                eventId,
+                savedAt: new Date()
+            });
+            
+            // Increment saved count on event
+            event.savedCount += 1;
+            await event.save();
+            
+            await req.user.save();
+        }
+        
+        res.json({
+            success: true,
+            message: 'Event saved',
+            savedEvents: req.user.savedEvents
+        });
+    } catch (error) {
+        console.error('Save event error:', error);
         res.status(500).json({ error: 'Failed to save event' });
     }
 });
 
-// Unsave event for a user
-app.post('/api/events/unsave', async (req, res) => {
+// Unsave event
+app.post('/api/events/unsave', auth.verifyToken, async (req, res) => {
     try {
-        const { email, eventId } = req.body;
+        const { eventId } = req.body;
         
-        if (!email || !eventId) {
-            return res.status(400).json({ error: 'Email and eventId are required' });
+        if (!eventId) {
+            return res.status(400).json({ error: 'Event ID is required' });
         }
         
-        const data = await readData();
+        // Remove from saved events
+        req.user.savedEvents = req.user.savedEvents.filter(
+            saved => saved.eventId !== eventId
+        );
         
-        if (data.savedEvents[email]) {
-            data.savedEvents[email] = data.savedEvents[email].filter(id => id !== eventId);
-            await writeData(data);
+        // Decrement saved count on event
+        const event = await Event.findOne({ eventId });
+        if (event && event.savedCount > 0) {
+            event.savedCount -= 1;
+            await event.save();
         }
         
-        res.json({ success: true, message: 'Event unsaved' });
+        await req.user.save();
+        
+        res.json({
+            success: true,
+            message: 'Event unsaved',
+            savedEvents: req.user.savedEvents
+        });
     } catch (error) {
-        console.error('Error unsaving event:', error);
+        console.error('Unsave event error:', error);
         res.status(500).json({ error: 'Failed to unsave event' });
     }
 });
 
-// Track event clicks
-app.post('/api/events/click', async (req, res) => {
+// Track event click
+app.post('/api/events/click', auth.optionalAuth, async (req, res) => {
     try {
         const { eventId, eventTitle, eventTopic } = req.body;
         
         if (!eventId) {
-            return res.status(400).json({ error: 'eventId is required' });
+            return res.status(400).json({ error: 'Event ID is required' });
         }
         
-        const data = await readData();
+        // Record click
+        const eventClick = new EventClick({
+            eventId,
+            eventTitle: eventTitle || eventId,
+            eventTopic: eventTopic || 'unknown',
+            userId: req.user?._id,
+            sessionId: req.cookies.sessionId || 'anonymous',
+            deviceInfo: {
+                userAgent: req.clientInfo.userAgent
+            },
+            location: {
+                ipAddress: req.clientInfo.ip,
+                country: req.clientInfo.geo?.country
+            }
+        });
         
-        if (!data.eventClicks) {
-            data.eventClicks = {};
-        }
+        await eventClick.save();
         
-        if (!data.eventClicks[eventId]) {
-            data.eventClicks[eventId] = {
-                id: eventId,
-                title: eventTitle || eventId,
-                topic: eventTopic || 'unknown',
-                count: 0,
-                lastClicked: null
-            };
-        }
-        
-        data.eventClicks[eventId].count += 1;
-        data.eventClicks[eventId].lastClicked = new Date().toISOString();
-        
-        await writeData(data);
+        // Update event click count
+        await Event.findOneAndUpdate(
+            { eventId },
+            { $inc: { clickCount: 1 } },
+            { upsert: true }
+        );
         
         res.json({ success: true, message: 'Event click tracked' });
     } catch (error) {
-        console.error('Error tracking event click:', error);
+        console.error('Track event click error:', error);
         res.status(500).json({ error: 'Failed to track event click' });
     }
 });
 
-// Track visit statistics
-app.post('/api/visits', async (req, res) => {
+// ============================================================================
+// EMAIL SUBSCRIPTIONS
+// ============================================================================
+
+// Subscribe to weekly emails
+app.post('/api/emails/subscribe', async (req, res) => {
     try {
-        const { userId, isNewUser } = req.body;
-        const data = await readData();
+        const { email } = req.body;
         
-        // Initialize structures if needed
-        if (!data.visitStats) {
-            data.visitStats = {
-                firstVisits: 0,
-                returnVisits: 0,
-                totalVisits: 0,
-                uniqueUsers: 0,
-                lastVisit: null
-            };
+        if (!email || !email.includes('@')) {
+            return res.status(400).json({ error: 'Valid email is required' });
         }
         
-        if (!data.userSessions) {
-            data.userSessions = {};
-        }
+        // Check if already subscribed
+        let subscription = await EmailSubscription.findOne({ 
+            email: email.toLowerCase() 
+        });
         
-        // Generate or retrieve user ID
-        let currentUserId = userId;
-        if (!currentUserId) {
-            currentUserId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        }
-        
-        // Track unique user
-        let isFirstVisit = false;
-        if (isNewUser && !data.userSessions[currentUserId]) {
-            data.userSessions[currentUserId] = {
-                firstVisit: new Date().toISOString(),
-                visits: 0,
-                lastVisit: null
-            };
-            data.visitStats.uniqueUsers = Object.keys(data.userSessions).length;
-            isFirstVisit = true;
-        }
-        
-        // Update user session
-        if (data.userSessions[currentUserId]) {
-            data.userSessions[currentUserId].visits += 1;
-            data.userSessions[currentUserId].lastVisit = new Date().toISOString();
+        if (subscription) {
+            // Reactivate if unsubscribed
+            if (!subscription.isActive) {
+                subscription.isActive = true;
+                subscription.unsubscribedAt = null;
+                await subscription.save();
+            }
         } else {
-            // User exists but wasn't in sessions (migration case)
-            data.userSessions[currentUserId] = {
-                firstVisit: new Date().toISOString(),
-                visits: 1,
-                lastVisit: new Date().toISOString()
-            };
-            data.visitStats.uniqueUsers = Object.keys(data.userSessions).length;
+            // Create new subscription
+            subscription = new EmailSubscription({
+                email: email.toLowerCase(),
+                source: 'weekly_reminder',
+                subscribedAt: new Date()
+            });
+            await subscription.save();
         }
-        
-        // Update aggregate stats correctly
-        if (isFirstVisit) {
-            data.visitStats.firstVisits += 1;
-        } else {
-            data.visitStats.returnVisits += 1;
-        }
-        
-        data.visitStats.totalVisits += 1;
-        data.visitStats.lastVisit = new Date().toISOString();
-        
-        await writeData(data);
         
         res.json({ 
             success: true, 
-            message: 'Visit tracked',
-            userId: currentUserId,
-            isFirstVisit: isFirstVisit
+            message: 'Subscribed to weekly emails',
+            email: subscription.email
         });
     } catch (error) {
-        console.error('Error tracking visit:', error);
+        console.error('Email subscription error:', error);
+        res.status(500).json({ error: 'Failed to subscribe' });
+    }
+});
+
+// Unsubscribe from emails
+app.post('/api/emails/unsubscribe', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        
+        const subscription = await EmailSubscription.findOne({ 
+            email: email.toLowerCase() 
+        });
+        
+        if (subscription) {
+            subscription.isActive = false;
+            subscription.unsubscribedAt = new Date();
+            await subscription.save();
+        }
+        
+        res.json({ success: true, message: 'Unsubscribed successfully' });
+    } catch (error) {
+        console.error('Unsubscribe error:', error);
+        res.status(500).json({ error: 'Failed to unsubscribe' });
+    }
+});
+
+// ============================================================================
+// VISIT TRACKING
+// ============================================================================
+
+// Track visit
+app.post('/api/visits/track', auth.optionalAuth, async (req, res) => {
+    try {
+        const { isReturning, sessionId } = req.body;
+        
+        // Generate session ID if not provided
+        const currentSessionId = sessionId || 
+            `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Set session cookie
+        res.cookie('sessionId', currentSessionId, {
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            httpOnly: true
+        });
+        
+        // Record visit
+        const visit = new Visit({
+            userId: req.user?._id,
+            sessionId: currentSessionId,
+            isNewUser: !isReturning,
+            isReturning: isReturning || false,
+            deviceInfo: {
+                userAgent: req.clientInfo.userAgent,
+                browser: req.clientInfo.userAgent?.match(/(chrome|firefox|safari|edge)/i)?.[0] || 'unknown',
+                os: req.clientInfo.userAgent?.match(/(windows|mac os|linux|android|ios)/i)?.[0] || 'unknown',
+                language: req.headers['accept-language']?.split(',')[0] || 'en',
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            location: {
+                ipAddress: req.clientInfo.ip,
+                country: req.clientInfo.geo?.country,
+                city: req.clientInfo.geo?.city,
+                region: req.clientInfo.geo?.region
+            },
+            referrer: req.clientInfo.referrer,
+            visitedAt: new Date()
+        });
+        
+        await visit.save();
+        
+        // Update user visit count if logged in
+        if (req.user) {
+            req.user.visitCount += 1;
+            req.user.lastVisit = new Date();
+            await req.user.save();
+        }
+        
+        res.json({
+            success: true,
+            message: 'Visit tracked',
+            sessionId: currentSessionId,
+            isNewUser: !isReturning
+        });
+    } catch (error) {
+        console.error('Visit tracking error:', error);
         res.status(500).json({ error: 'Failed to track visit' });
     }
 });
 
-// Get user retention analytics
-app.get('/api/analytics/retention', async (req, res) => {
+// ============================================================================
+// ADMIN DASHBOARD ENDPOINTS
+// ============================================================================
+
+// Get admin dashboard data (protected)
+app.get('/api/admin/dashboard', async (req, res) => {
     try {
-        const data = await readData();
+        // Check admin password from query parameter
+        const { password } = req.query;
         
-        const userSessions = data.userSessions || {};
-        const users = Object.values(userSessions);
+        if (password !== process.env.ADMIN_PASSWORD) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
         
-        // Calculate retention metrics
-        const now = new Date();
-        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
-        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
-        
-        // Active users
-        const dailyActive = users.filter(user => 
-            user.lastVisit && new Date(user.lastVisit) > oneDayAgo
-        ).length;
-        
-        const weeklyActive = users.filter(user => 
-            user.lastVisit && new Date(user.lastVisit) > sevenDaysAgo
-        ).length;
-        
-        const monthlyActive = users.filter(user => 
-            user.lastVisit && new Date(user.lastVisit) > thirtyDaysAgo
-        ).length;
-        
-        // Retention cohorts
-        const cohorts = {};
-        users.forEach(user => {
-            const firstVisitDate = new Date(user.firstVisit).toISOString().split('T')[0];
-            if (!cohorts[firstVisitDate]) {
-                cohorts[firstVisitDate] = {
-                    date: firstVisitDate,
-                    totalUsers: 0,
-                    returnedDay1: 0,
-                    returnedDay7: 0,
-                    returnedDay30: 0
-                };
-            }
-            cohorts[firstVisitDate].totalUsers += 1;
+        // Get all data in parallel
+        const [
+            totalUsers,
+            activeUsers,
+            emailSubscriptions,
+            totalVisits,
+            eventClicks,
+            popularEvents,
+            recentVisits
+        ] = await Promise.all([
+            // Total users
+            User.countDocuments(),
             
-            // Check if returned within timeframes
-            const daysSinceFirst = Math.floor((now - new Date(user.firstVisit)) / (1000 * 60 * 60 * 24));
-            const returnedLater = user.visits > 1;
+            // Active users (visited in last 30 days)
+            User.countDocuments({ 
+                lastVisit: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+            }),
             
-            if (returnedLater && daysSinceFirst >= 1) cohorts[firstVisitDate].returnedDay1 += 1;
-            if (returnedLater && daysSinceFirst >= 7) cohorts[firstVisitDate].returnedDay7 += 1;
-            if (returnedLater && daysSinceFirst >= 30) cohorts[firstVisitDate].returnedDay30 += 1;
-        });
+            // Email subscriptions
+            EmailSubscription.countDocuments({ isActive: true }),
+            
+            // Total visits
+            Visit.countDocuments(),
+            
+            // Event clicks summary
+            EventClick.aggregate([
+                { $group: {
+                    _id: '$eventId',
+                    count: { $sum: 1 },
+                    lastClicked: { $max: '$clickedAt' }
+                }},
+                { $sort: { count: -1 } },
+                { $limit: 20 }
+            ]),
+            
+            // Popular events
+            Event.find()
+                .sort({ savedCount: -1 })
+                .limit(10)
+                .select('eventId title topic savedCount clickCount'),
+                
+            // Recent visits
+            Visit.find()
+                .sort({ visitedAt: -1 })
+                .limit(20)
+                .populate('userId', 'email')
+                .select('visitedAt deviceInfo.browser location.country isNewUser')
+        ]);
+        
+        // Calculate return rate
+        const uniqueVisitors = await Visit.distinct('sessionId');
+        const returningVisits = await Visit.countDocuments({ isReturning: true });
+        const returnRate = totalVisits > 0 ? 
+            Math.round((returningVisits / totalVisits) * 100) : 0;
+        
+        // Get daily stats for last 30 days
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const dailyStats = await Visit.aggregate([
+            { $match: { visitedAt: { $gte: thirtyDaysAgo } } },
+            { $group: {
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$visitedAt' } },
+                visits: { $sum: 1 },
+                newUsers: { $sum: { $cond: ['$isNewUser', 1, 0] } },
+                returningUsers: { $sum: { $cond: ['$isReturning', 1, 0] } }
+            }},
+            { $sort: { _id: 1 } }
+        ]);
         
         res.json({
             success: true,
-            metrics: {
-                totalUniqueUsers: users.length,
-                dailyActiveUsers: dailyActive,
-                weeklyActiveUsers: weeklyActive,
-                monthlyActiveUsers: monthlyActive,
-                totalVisits: data.visitStats.totalVisits || 0,
-                averageVisitsPerUser: users.length > 0 ? (data.visitStats.totalVisits / users.length).toFixed(2) : 0,
-                returnRate: users.length > 0 ? 
-                    ((users.filter(u => u.visits > 1).length / users.length) * 100).toFixed(1) + '%' : '0%'
-            },
-            cohorts: Object.values(cohorts).slice(-10).reverse(), // Last 10 cohorts, newest first
-            userSessions: userSessions
+            dashboard: {
+                metrics: {
+                    totalUsers,
+                    activeUsers,
+                    emailSubscriptions,
+                    totalVisits,
+                    uniqueVisitors: uniqueVisitors.length,
+                    returnRate: `${returnRate}%`,
+                    avgVisitsPerUser: totalUsers > 0 ? (totalVisits / totalUsers).toFixed(2) : 0
+                },
+                emailSubscriptions: await EmailSubscription.find({ isActive: true })
+                    .sort({ subscribedAt: -1 })
+                    .limit(100)
+                    .select('email subscribedAt'),
+                eventClicks,
+                popularEvents,
+                recentVisits,
+                dailyStats,
+                users: await User.find()
+                    .sort({ lastVisit: -1 })
+                    .limit(50)
+                    .select('email savedEvents visitCount firstVisit lastVisit')
+            }
         });
     } catch (error) {
-        console.error('Error getting retention analytics:', error);
-        res.status(500).json({ error: 'Failed to get analytics' });
+        console.error('Admin dashboard error:', error);
+        res.status(500).json({ error: 'Failed to load dashboard' });
     }
 });
 
-// Serve static files (for both development and production)
-// IMPORTANT: This must come AFTER all API routes
-app.use(express.static(path.join(__dirname)));
+// Get user analytics
+app.get('/api/admin/analytics', async (req, res) => {
+    try {
+        const { password } = req.query;
+        
+        if (password !== process.env.ADMIN_PASSWORD) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        // Cohort analysis
+        const cohorts = await User.aggregate([
+            { $group: {
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$firstVisit' } },
+                totalUsers: { $sum: 1 },
+                activeUsers: {
+                    $sum: {
+                        $cond: [
+                            { $gte: ['$lastVisit', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)] },
+                            1, 0
+                        ]
+                    }
+                }
+            }},
+            { $sort: { _id: -1 } },
+            { $limit: 30 }
+        ]);
+        
+        // Device analytics
+        const deviceStats = await Visit.aggregate([
+            { $group: {
+                _id: '$deviceInfo.browser',
+                count: { $sum: 1 }
+            }},
+            { $sort: { count: -1 } }
+        ]);
+        
+        // Geographic analytics
+        const locationStats = await Visit.aggregate([
+            { $match: { 'location.country': { $exists: true, $ne: null } } },
+            { $group: {
+                _id: '$location.country',
+                count: { $sum: 1 }
+            }},
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ]);
+        
+        res.json({
+            success: true,
+            analytics: {
+                cohorts,
+                deviceStats,
+                locationStats,
+                hourlyStats: await getHourlyStats(),
+                userRetention: await calculateRetention()
+            }
+        });
+    } catch (error) {
+        console.error('Analytics error:', error);
+        res.status(500).json({ error: 'Failed to load analytics' });
+    }
+});
+
+async function getHourlyStats() {
+    return await Visit.aggregate([
+        { $group: {
+            _id: { $hour: '$visitedAt' },
+            count: { $sum: 1 }
+        }},
+        { $sort: { _id: 1 } }
+    ]);
+}
+
+async function calculateRetention() {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    const [d7Active, d30Active, totalUsers] = await Promise.all([
+        User.countDocuments({ lastVisit: { $gte: sevenDaysAgo } }),
+        User.countDocuments({ lastVisit: { $gte: thirtyDaysAgo } }),
+        User.countDocuments()
+    ]);
+    
+    return {
+        d7Retention: totalUsers > 0 ? Math.round((d7Active / totalUsers) * 100) : 0,
+        d30Retention: totalUsers > 0 ? Math.round((d30Active / totalUsers) * 100) : 0,
+        d7Active,
+        d30Active,
+        totalUsers
+    };
+}
+
+// ============================================================================
+// DATA EXPORT
+// ============================================================================
+
+// Export all data (admin only)
+app.get('/api/admin/export', async (req, res) => {
+    try {
+        const { password, format } = req.query;
+        
+        if (password !== process.env.ADMIN_PASSWORD) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        const exportData = {
+            timestamp: new Date().toISOString(),
+            users: await User.find().select('-__v').lean(),
+            events: await Event.find().select('-__v').lean(),
+            emailSubscriptions: await EmailSubscription.find().select('-__v').lean(),
+            visits: await Visit.find().limit(1000).select('-__v').lean(),
+            eventClicks: await EventClick.find().limit(1000).select('-__v').lean(),
+            summary: {
+                totalUsers: await User.countDocuments(),
+                totalVisits: await Visit.countDocuments(),
+                totalEmails: await EmailSubscription.countDocuments(),
+                totalEventClicks: await EventClick.countDocuments()
+            }
+        };
+        
+        if (format === 'csv') {
+            // Implement CSV export if needed
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=webibook-export.csv');
+            // Convert to CSV (simplified)
+            res.send(JSON.stringify(exportData));
+        } else {
+            res.json(exportData);
+        }
+    } catch (error) {
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'Failed to export data' });
+    }
+});
+
+// ============================================================================
+// INITIALIZE SAMPLE DATA
+// ============================================================================
+
+async function initializeSampleData() {
+    try {
+        // Check if events exist
+        const eventCount = await Event.countDocuments();
+        
+        if (eventCount === 0) {
+            const sampleEvents = [
+                {
+                    eventId: 'event-1',
+                    title: 'Introduction to React Hooks',
+                    topic: 'Development',
+                    date: 'January 18, 2024',
+                    time: '2:00 PM EST',
+                    duration: '1 hour',
+                    audience: 'Frontend developers new to React',
+                    url: 'https://example.com/react-hooks',
+                    description: 'Learn the fundamentals of React Hooks'
+                },
+                {
+                    eventId: 'event-2',
+                    title: 'Data Science Fundamentals',
+                    topic: 'Data',
+                    date: 'January 19, 2024',
+                    time: '10:00 AM PST',
+                    duration: '90 minutes',
+                    audience: 'Beginners interested in data analysis',
+                    url: 'https://example.com/data-science',
+                    description: 'Introduction to data science concepts'
+                },
+                {
+                    eventId: 'event-3',
+                    title: 'Product Design Workshop',
+                    topic: 'Design',
+                    date: 'January 20, 2024',
+                    time: '3:30 PM EST',
+                    duration: '2 hours',
+                    audience: 'Product managers and designers',
+                    url: 'https://example.com/product-design',
+                    description: 'Workshop on modern product design principles'
+                }
+            ];
+            
+            await Event.insertMany(sampleEvents);
+            console.log('✅ Sample events added to database');
+        }
+    } catch (error) {
+        console.error('Error initializing sample data:', error);
+    }
+}
+
+// ============================================================================
+// STATIC FILES AND ROUTING
+// ============================================================================
+
+// Serve static files from parent directory
+app.use(express.static(path.join(__dirname, '..')));
 
 // Serve index.html for all non-API routes (SPA fallback)
 app.get('*', (req, res) => {
-    // Don't serve index.html for API routes
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// Start server
-async function startServer() {
-    await initializeDataFile();
-    
-    const server = app.listen(PORT, () => {
-        console.log(`🚀 WebiBook Analytics Server running on port ${PORT}`);
-        console.log(`📊 Data file: ${DATA_FILE}`);
-        console.log(`🌐 API endpoint: http://localhost:${PORT}/api/data`);
-        console.log(`📱 Frontend: http://localhost:${PORT}`);
-        console.log(`🔐 Admin: http://localhost:${PORT}?admin=webiBook2024`);
-    });
-    
-    // Handle port already in use error
-    server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.error(`\n❌ Port ${PORT} is already in use!`);
-            console.log(`\n💡 Try one of these solutions:`);
-            console.log(`   1. Kill the process: lsof -ti:${PORT} | xargs kill -9`);
-            console.log(`   2. Use a different port: PORT=3001 npm run dev`);
-            console.log(`   3. Find what's using it: lsof -i:${PORT}\n`);
-            process.exit(1);
-        } else {
-            throw err;
-        }
-    });
-}
+// ============================================================================
+// START SERVER
+// ============================================================================
 
-startServer().catch(console.error);
+app.listen(PORT, async () => {
+    console.log(`🚀 WebiBook MongoDB Server running on port ${PORT}`);
+    console.log(`📊 Database: MongoDB Atlas`);
+    console.log(`🔐 Admin: http://localhost:${PORT}?admin=${process.env.ADMIN_PASSWORD}`);
+    console.log(`🌐 API: http://localhost:${PORT}/api/health`);
+    
+    // Initialize sample data
+    await initializeSampleData();
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('👋 Shutting down server...');
+    await mongoose.connection.close();
+    process.exit(0);
+});

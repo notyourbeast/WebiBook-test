@@ -836,673 +836,605 @@
     </div>
 
     <script>
-        // ============================================================================
-        // API CONFIGURATION
-        // ============================================================================
-        // API base URL - automatically detects if running locally or on server
-        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3000/api'
-            : '/api'; // Use relative path for production (same domain)
-
-        // Helper function to call API
-        async function callAPI(endpoint, method = 'GET', body = null) {
-            try {
-                const options = {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                };
-
-                if (body) {
-                    options.body = JSON.stringify(body);
+    // ============================================================================
+    // ADMIN PASSWORD CONFIGURATION
+    // ============================================================================
+    window.ADMIN_PASSWORD = 'webiBook2024';
+    
+    function checkAdminAccess() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPassword = urlParams.get('admin');
+        const storedAuth = localStorage.getItem('webiBookAdminAuth');
+        return urlPassword === window.ADMIN_PASSWORD || storedAuth === window.ADMIN_PASSWORD;
+    }
+    
+    // ============================================================================
+    // API CONFIGURATION - UPDATED FOR MONGODB
+    // ============================================================================
+    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3000/api'
+        : '/api';
+    
+    async function callAPI(endpoint, method = 'GET', body = null, requiresAuth = false) {
+        try {
+            const token = localStorage.getItem('webiBookToken');
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json'
                 }
-
-                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-
-                return await response.json();
-            } catch (error) {
-                console.error('API call failed:', error);
-                // Return null on error - app will continue to work with localStorage fallback
-                return null;
+            };
+            
+            if (token && requiresAuth) {
+                options.headers.Authorization = `Bearer ${token}`;
             }
-        }
-
-        // Add this function in the admin dashboard section
-        async function loadRetentionAnalytics() {
-            try {
-                const response = await callAPI('/analytics/retention');
-                if (response && response.success) {
-                    const metrics = response.metrics;
-
-                    // Update retention metrics
-                    document.getElementById('metric-emails').textContent = weeklyEmails.length;
-                    document.getElementById('metric-users').textContent = metrics.totalUniqueUsers;
-                    document.getElementById('metric-saved').textContent = totalSavedEvents;
-                    document.getElementById('metric-returns').textContent = metrics.returnRate;
-                    document.getElementById('metric-returns-detail').textContent =
-                        `${metrics.dailyActiveUsers} active today`;
-
-                    // Add new retention cards if they don't exist
-                    let metricsGrid = document.querySelector('.metrics-grid');
-                    if (metricsGrid && !document.getElementById('metric-dau')) {
-                        metricsGrid.innerHTML += `
-                    <div class="metric-card">
-                        <h3>Daily Active</h3>
-                        <p class="value" id="metric-dau">${metrics.dailyActiveUsers}</p>
-                        <p class="change">Active last 24h</p>
-                    </div>
-                    <div class="metric-card">
-                        <h3>Avg Visits/User</h3>
-                        <p class="value" id="metric-avg-visits">${metrics.averageVisitsPerUser}</p>
-                        <p class="change">Engagement level</p>
-                    </div>
-                `;
-                    }
-
-                    // Update retention chart
-                    createRetentionChart(response.cohorts);
-                }
-            } catch (error) {
-                console.error('Error loading retention analytics:', error);
+            
+            if (body) {
+                options.body = JSON.stringify(body);
             }
-        }
-
-        // Call this in loadDashboardData() after loading regular data
-        // Add: await loadRetentionAnalytics();
-
-        // ============================================================================
-        // EVENTS DATA
-        // ============================================================================
-        // TODO: Add or edit events in this array. Each event needs:
-        // - id: unique identifier (string)
-        // - title: event name (string)
-        // - topic: single word category (string)
-        // - date: date string (string)
-        // - time: time string with timezone (string)
-        // - duration: how long the event lasts (string)
-        // - audience: one-line description of who it's for (string)
-        // - url: external link to the event (string)
-        // ============================================================================
-        const events = [
-            {
-                id: 'event-1',
-                title: 'Introduction to React Hooks',
-                topic: 'Development',
-                date: 'January 18, 2024',
-                time: '2:00 PM EST',
-                duration: '1 hour',
-                audience: 'Frontend developers new to React',
-                url: 'https://example.com/react-hooks'
-            },
-            {
-                id: 'event-2',
-                title: 'Data Science Fundamentals',
-                topic: 'Data',
-                date: 'January 19, 2024',
-                time: '10:00 AM PST',
-                duration: '90 minutes',
-                audience: 'Beginners interested in data analysis',
-                url: 'https://example.com/data-science'
-            },
-            {
-                id: 'event-3',
-                title: 'Product Design Workshop',
-                topic: 'Design',
-                date: 'January 20, 2024',
-                time: '3:30 PM EST',
-                duration: '2 hours',
-                audience: 'Product managers and designers',
-                url: 'https://example.com/product-design'
+            
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+            
+            if (response.status === 401) {
+                localStorage.removeItem('webiBookToken');
+                localStorage.removeItem('webiBookUser');
+                updateLoginUI();
+                throw new Error('Session expired. Please login again.');
             }
-        ];
-
-        // ============================================================================
-        // USER AUTHENTICATION (Simple localStorage-based with email)
-        // ============================================================================
-        function getCurrentUser() {
-            return localStorage.getItem('webiBookUserEmail');
+            
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('API call failed:', error);
+            return null;
         }
-
-        function setCurrentUser(email) {
-            localStorage.setItem('webiBookUserEmail', email);
-        }
-
-        function clearCurrentUser() {
-            localStorage.removeItem('webiBookUserEmail');
-        }
-
-        function showLoginSection() {
-            const loginSection = document.getElementById('login-section');
-            loginSection.classList.remove('section-hidden');
-            // Scroll to login section smoothly
-            loginSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-
-        function hideLoginSection() {
-            const loginSection = document.getElementById('login-section');
-            loginSection.classList.add('section-hidden');
-        }
-
-        function updateLoginUI() {
-            const email = getCurrentUser();
-            const loginFormContainer = document.getElementById('login-form-container');
-            const loggedInContainer = document.getElementById('logged-in-container');
-            const loginSection = document.getElementById('login-section');
-
-            if (email) {
-                loginFormContainer.style.display = 'none';
-                loggedInContainer.style.display = 'block';
-                document.getElementById('username-display').textContent = email;
-                loginSection.classList.add('logged-in');
-                loginSection.classList.remove('section-hidden');
+    }
+    
+    // ============================================================================
+    // EVENTS DATA (Now fetched from MongoDB)
+    // ============================================================================
+    let events = [];
+    
+    async function loadEvents() {
+        try {
+            const response = await callAPI('/events');
+            if (response && response.success) {
+                events = response.events;
+                renderEvents();
             } else {
-                loginFormContainer.style.display = 'block';
-                loggedInContainer.style.display = 'none';
-                loginSection.classList.remove('logged-in');
-                // Hide by default, will show when user tries to save
-                hideLoginSection();
+                // Fallback to default events if API fails
+                events = [
+                    {
+                        id: 'event-1',
+                        title: 'Introduction to React Hooks',
+                        topic: 'Development',
+                        date: 'January 18, 2024',
+                        time: '2:00 PM EST',
+                        duration: '1 hour',
+                        audience: 'Frontend developers new to React',
+                        url: 'https://example.com/react-hooks'
+                    },
+                    {
+                        id: 'event-2',
+                        title: 'Data Science Fundamentals',
+                        topic: 'Data',
+                        date: 'January 19, 2024',
+                        time: '10:00 AM PST',
+                        duration: '90 minutes',
+                        audience: 'Beginners interested in data analysis',
+                        url: 'https://example.com/data-science'
+                    },
+                    {
+                        id: 'event-3',
+                        title: 'Product Design Workshop',
+                        topic: 'Design',
+                        date: 'January 20, 2024',
+                        time: '3:30 PM EST',
+                        duration: '2 hours',
+                        audience: 'Product managers and designers',
+                        url: 'https://example.com/product-design'
+                    }
+                ];
+                renderEvents();
             }
+        } catch (error) {
+            console.error('Error loading events:', error);
         }
-
-        // ============================================================================
-        // SAVED EVENTS (User-specific, tied to email)
-        // ============================================================================
-        // Get the storage key for saved events (user-specific)
-        function getSavedEventsKey() {
-            const userEmail = getCurrentUser();
-            if (userEmail) {
-                // User-specific key: saved events tied to their email
-                return `webiBookSavedEvents_${userEmail}`;
+    }
+    
+    // ============================================================================
+    // USER AUTHENTICATION - MONGODB BASED
+    // ============================================================================
+    async function registerOrLoginUser(email, password = null, name = '') {
+        try {
+            const response = await callAPI('/auth/register', 'POST', {
+                email,
+                password,
+                name
+            });
+            
+            if (response && response.success) {
+                localStorage.setItem('webiBookToken', response.token);
+                localStorage.setItem('webiBookUser', JSON.stringify(response.user));
+                updateLoginUI();
+                await trackVisit(false);
+                return response.user;
             }
-            // Fallback to browser-only (for users not logged in, but they can't save anyway)
-            return 'webiBookSavedEvents_anonymous';
+            return null;
+        } catch (error) {
+            console.error('Authentication error:', error);
+            return null;
         }
-
-        // Load saved events from localStorage (user-specific)
-        function loadSavedEvents() {
-            const key = getSavedEventsKey();
-            const saved = localStorage.getItem(key);
-            return saved ? JSON.parse(saved) : [];
+    }
+    
+    function getCurrentUser() {
+        const userStr = localStorage.getItem('webiBookUser');
+        return userStr ? JSON.parse(userStr) : null;
+    }
+    
+    function getAuthToken() {
+        return localStorage.getItem('webiBookToken');
+    }
+    
+    function clearCurrentUser() {
+        localStorage.removeItem('webiBookToken');
+        localStorage.removeItem('webiBookUser');
+        updateLoginUI();
+    }
+    
+    async function getUserProfile() {
+        const token = getAuthToken();
+        if (!token) return null;
+        
+        const response = await callAPI('/auth/profile', 'GET', null, true);
+        return response?.user || null;
+    }
+    
+    function showLoginSection() {
+        const loginSection = document.getElementById('login-section');
+        loginSection.classList.remove('section-hidden');
+        loginSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    function hideLoginSection() {
+        const loginSection = document.getElementById('login-section');
+        loginSection.classList.add('section-hidden');
+    }
+    
+    function updateLoginUI() {
+        const user = getCurrentUser();
+        const loginFormContainer = document.getElementById('login-form-container');
+        const loggedInContainer = document.getElementById('logged-in-container');
+        const loginSection = document.getElementById('login-section');
+        
+        if (user) {
+            loginFormContainer.style.display = 'none';
+            loggedInContainer.style.display = 'block';
+            document.getElementById('username-display').textContent = user.email;
+            loginSection.classList.add('logged-in');
+            loginSection.classList.remove('section-hidden');
+        } else {
+            loginFormContainer.style.display = 'block';
+            loggedInContainer.style.display = 'none';
+            loginSection.classList.remove('logged-in');
+            hideLoginSection();
         }
-
-        // Save an event ID to localStorage (user-specific) and backend
-        async function saveEvent(eventId) {
-            const userEmail = getCurrentUser();
-            const key = getSavedEventsKey();
-            const saved = loadSavedEvents();
-
-            if (!saved.includes(eventId)) {
-                saved.push(eventId);
-                localStorage.setItem(key, JSON.stringify(saved));
-
-                // Also save to backend if user is logged in
-                if (userEmail) {
-                    await callAPI('/events/save', 'POST', {
-                        email: userEmail,
-                        eventId: eventId
-                    });
+    }
+    
+    // ============================================================================
+    // SAVED EVENTS - MONGODB BASED
+    // ============================================================================
+    function loadSavedEvents() {
+        const user = getCurrentUser();
+        if (user && user.savedEvents) {
+            return user.savedEvents.map(item => item.eventId || item);
+        }
+        return [];
+    }
+    
+    async function saveEvent(eventId) {
+        const user = getCurrentUser();
+        const token = getAuthToken();
+        
+        if (!user || !token) {
+            showLoginSection();
+            return false;
+        }
+        
+        try {
+            const response = await callAPI('/events/save', 'POST', { eventId }, true);
+            
+            if (response && response.success) {
+                const updatedUser = { ...user, savedEvents: response.savedEvents };
+                localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Save event error:', error);
+            return false;
+        }
+    }
+    
+    async function unsaveEvent(eventId) {
+        const user = getCurrentUser();
+        const token = getAuthToken();
+        
+        if (!user || !token) return false;
+        
+        try {
+            const response = await callAPI('/events/unsave', 'POST', { eventId }, true);
+            
+            if (response && response.success) {
+                const updatedUser = { ...user, savedEvents: response.savedEvents };
+                localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Unsave event error:', error);
+            return false;
+        }
+    }
+    
+    function isEventSaved(eventId) {
+        const saved = loadSavedEvents();
+        return saved.includes(eventId);
+    }
+    
+    // ============================================================================
+    // VISIT TRACKING - MONGODB BASED
+    // ============================================================================
+    async function trackVisit(isReturning = false) {
+        try {
+            const sessionId = localStorage.getItem('webiBookSessionId') || 
+                `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            localStorage.setItem('webiBookSessionId', sessionId);
+            
+            const response = await callAPI('/visits/track', 'POST', {
+                isReturning,
+                sessionId
+            });
+            
+            return response;
+        } catch (error) {
+            console.error('Visit tracking error:', error);
+            return null;
+        }
+    }
+    
+    let visitInfoCache = null;
+    
+    async function trackReturnVisit() {
+        const firstVisit = localStorage.getItem('webiBookFirstVisit');
+        let isReturning = !!firstVisit;
+        
+        if (!firstVisit) {
+            localStorage.setItem('webiBookFirstVisit', new Date().toISOString());
+            localStorage.setItem('webiBookVisitCount', '1');
+            localStorage.setItem('webiBookLastVisit', new Date().toISOString());
+        } else {
+            const visitCount = parseInt(localStorage.getItem('webiBookVisitCount') || '0');
+            localStorage.setItem('webiBookVisitCount', (visitCount + 1).toString());
+            localStorage.setItem('webiBookLastVisit', new Date().toISOString());
+        }
+        
+        const visitResponse = await trackVisit(isReturning);
+        
+        return { 
+            isReturning: isReturning,
+            visitCount: parseInt(localStorage.getItem('webiBookVisitCount') || '0'),
+            userId: visitResponse?.userId || null
+        };
+    }
+    
+    async function getVisitInfo() {
+        if (!visitInfoCache) {
+            visitInfoCache = await trackReturnVisit();
+        }
+        return visitInfoCache;
+    }
+    
+    async function updateVisitorStatus() {
+        const visitInfo = await getVisitInfo();
+        const statusElement = document.getElementById('visitor-status');
+        
+        if (statusElement) {
+            if (visitInfo && visitInfo.isReturning) {
+                const lastVisit = localStorage.getItem('webiBookLastVisit');
+                let daysSince = 0;
+                if (lastVisit) {
+                    const lastVisitDate = new Date(lastVisit);
+                    daysSince = Math.floor((new Date() - lastVisitDate) / (1000 * 60 * 60 * 24));
                 }
+                
+                if (daysSince === 0) {
+                    statusElement.textContent = 'Welcome back! You visited earlier today.';
+                } else if (daysSince === 1) {
+                    statusElement.textContent = 'Welcome back! You visited yesterday.';
+                } else {
+                    statusElement.textContent = `Welcome back! You visited ${daysSince} days ago.`;
+                }
+            } else {
+                statusElement.textContent = 'First time here? Get weekly reminders to never miss an event.';
             }
         }
-
-        // Remove an event from saved events (user-specific) and backend
-        async function unsaveEvent(eventId) {
-            const userEmail = getCurrentUser();
-            const key = getSavedEventsKey();
-            const saved = loadSavedEvents();
-            const filtered = saved.filter(id => id !== eventId);
-            localStorage.setItem(key, JSON.stringify(filtered));
-
-            // Also update backend if user is logged in
-            if (userEmail) {
-                await callAPI('/events/unsave', 'POST', {
-                    email: userEmail,
-                    eventId: eventId
+    }
+    
+    // ============================================================================
+    // EVENT INTERACTION TRACKING
+    // ============================================================================
+    function trackEventView(eventId, eventTitle) {
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'event_viewed', {
+                'event_id': eventId,
+                'event_name': eventTitle
+            });
+        }
+    }
+    
+    async function trackEventClick(eventId, eventTitle, eventTopic) {
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'event_click', {
+                'event_id': eventId,
+                'event_name': eventTitle,
+                'event_topic': eventTopic
+            });
+        }
+        
+        await callAPI('/events/click', 'POST', {
+            eventId: eventId,
+            eventTitle: eventTitle,
+            eventTopic: eventTopic
+        });
+    }
+    
+    function trackTimeOnPage() {
+        const startTime = Date.now();
+        
+        window.addEventListener('beforeunload', function() {
+            const timeSpent = Math.floor((Date.now() - startTime) / 1000);
+            
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'time_on_page', {
+                    'time_spent_seconds': timeSpent
                 });
             }
+        });
+    }
+    
+    // ============================================================================
+    // EMAIL SUBSCRIPTIONS - MONGODB BASED
+    // ============================================================================
+    async function subscribeToEmails(email) {
+        try {
+            const response = await callAPI('/emails/subscribe', 'POST', { email });
+            return response?.success || false;
+        } catch (error) {
+            console.error('Email subscription error:', error);
+            return false;
         }
-
-        // Check if an event is saved (user-specific)
-        function isEventSaved(eventId) {
-            const saved = loadSavedEvents();
-            return saved.includes(eventId);
-        }
-
-        // Clear all saved events for current user (useful for testing/reset)
-        function clearSavedEvents() {
-            const key = getSavedEventsKey();
-            localStorage.removeItem(key);
-        }
-
-        // ============================================================================
-        // MIGRATION: Clear old test data (runs once on page load)
-        // ============================================================================
-        function clearOldTestData() {
-            // Clear old global saved events key (from before user-specific storage)
-            // This ensures a clean start when going live
-            const oldKey = 'webiBookSavedEvents';
-            if (localStorage.getItem(oldKey)) {
-                localStorage.removeItem(oldKey);
-            }
-
-            // Optional: Clear all user-specific saved events if you want a complete reset
-            // Uncomment the code below if you want to clear ALL saved events on launch:
-            /*
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('webiBookSavedEvents_')) {
-                    localStorage.removeItem(key);
-                }
-            });
-            */
-        }
-
-        // ============================================================================
-        // RENDER EVENTS
-        // ============================================================================
-        function renderEventHTML(event, isSaved) {
-            // Track that this event was viewed
-            trackEventView(event.id, event.title);
-
-            return `
-                <div class="event">
-                    <h2 class="event-title">${event.title}</h2>
-                    <div class="event-metadata">
-                        <span class="event-topic">${event.topic}</span>
-                        <span>${event.date}</span>
-                        <span>${event.time}</span>
-                        <span>${event.duration}</span>
-                    </div>
-                    <p class="event-audience">${event.audience}</p>
-                    <div class="event-actions">
-                        <a 
-                            href="${event.url}" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            class="btn-primary"
-                            data-event-id="${event.id}"
-                            data-event-title="${event.title}"
-                            data-event-topic="${event.topic}"
-                        >
-                            Go to event
-                        </a>
-                        <button 
-                            class="btn-secondary ${isSaved ? 'saved' : ''}"
-                            data-event-id="${event.id}"
-                        >
-                            ${isSaved ? 'Saved' : 'Save'}
-                        </button>
-                    </div>
+    }
+    
+    // ============================================================================
+    // RENDER EVENTS
+    // ============================================================================
+    function renderEventHTML(event, isSaved) {
+        trackEventView(event.eventId || event.id, event.title);
+        
+        return `
+            <div class="event">
+                <h2 class="event-title">${event.title}</h2>
+                <div class="event-metadata">
+                    <span class="event-topic">${event.topic}</span>
+                    <span>${event.date}</span>
+                    <span>${event.time}</span>
+                    <span>${event.duration}</span>
+                </div>
+                <p class="event-audience">${event.audience}</p>
+                <div class="event-actions">
+                    <a 
+                        href="${event.url}" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        class="btn-primary"
+                        data-event-id="${event.eventId || event.id}"
+                        data-event-title="${event.title}"
+                        data-event-topic="${event.topic}"
+                    >
+                        Go to event
+                    </a>
+                    <button 
+                        class="btn-secondary ${isSaved ? 'saved' : ''}"
+                        data-event-id="${event.eventId || event.id}"
+                    >
+                        ${isSaved ? 'Saved' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderEvents() {
+        const container = document.getElementById('events-list');
+        const savedEvents = loadSavedEvents();
+        
+        container.innerHTML = events.map(event => {
+            const isSaved = savedEvents.includes(event.eventId || event.id);
+            return renderEventHTML(event, isSaved);
+        }).join('');
+        
+        attachEventListeners();
+    }
+    
+    function renderSavedEvents() {
+        const container = document.getElementById('saved-events-list');
+        const savedEvents = loadSavedEvents();
+        
+        if (savedEvents.length === 0) {
+            container.innerHTML = `
+                <div class="saved-events-empty">
+                    <p>No saved events yet</p>
+                    <small>Save events from the "All Events" tab to see them here</small>
                 </div>
             `;
+            return;
         }
-
-        function renderEvents() {
-            const container = document.getElementById('events-list');
-            const savedEvents = loadSavedEvents();
-
-            container.innerHTML = events.map(event => {
-                const isSaved = savedEvents.includes(event.id);
-                return renderEventHTML(event, isSaved);
-            }).join('');
-
-            // Attach event listeners after rendering
-            attachEventListeners();
-        }
-
-        function renderSavedEvents() {
-            const container = document.getElementById('saved-events-list');
-            const savedEvents = loadSavedEvents();
-
-            if (savedEvents.length === 0) {
-                container.innerHTML = `
-                    <div class="saved-events-empty">
-                        <p>No saved events yet</p>
-                        <small>Save events from the "All Events" tab to see them here</small>
-                    </div>
-                `;
-                return;
-            }
-
-            // Filter events to only show saved ones
-            const savedEventsData = events.filter(event => savedEvents.includes(event.id));
-
-            container.innerHTML = savedEventsData.map(event => {
-                return renderEventHTML(event, true);
-            }).join('');
-
-            // Attach event listeners after rendering
-            attachEventListeners();
-        }
-
-        // ============================================================================
-        // EVENT LISTENERS
-        // ============================================================================
-        function attachEventListeners() {
-            // Handle "Go to event" clicks
-            document.querySelectorAll('.btn-primary').forEach(btn => {
-                btn.addEventListener('click', function (e) {
-                    const eventId = this.getAttribute('data-event-id');
-                    const eventTitle = this.getAttribute('data-event-title');
-                    const eventTopic = this.getAttribute('data-event-topic');
-
-                    // Fire Google Analytics event
-                    if (typeof gtag !== 'undefined') {
-                        gtag('event', 'event_click', {
-                            'event_id': eventId,
-                            'event_name': eventTitle,
-                            'event_topic': eventTopic
-                        });
-                    }
-
-                    // Track event click in backend
-                    callAPI('/events/click', 'POST', {
-                        eventId: eventId,
-                        eventTitle: eventTitle,
-                        eventTopic: eventTopic
-                    });
-
-                    // Link will open in new tab (target="_blank" handles this)
-                });
+        
+        const savedEventsData = events.filter(event => 
+            savedEvents.includes(event.eventId || event.id)
+        );
+        
+        container.innerHTML = savedEventsData.map(event => {
+            return renderEventHTML(event, true);
+        }).join('');
+        
+        attachEventListeners();
+    }
+    
+    // ============================================================================
+    // EVENT LISTENERS
+    // ============================================================================
+    function attachEventListeners() {
+        document.querySelectorAll('.btn-primary').forEach(btn => {
+            btn.addEventListener('click', async function(e) {
+                const eventId = this.getAttribute('data-event-id');
+                const eventTitle = this.getAttribute('data-event-title');
+                const eventTopic = this.getAttribute('data-event-topic');
+                
+                await trackEventClick(eventId, eventTitle, eventTopic);
             });
-
-            // Handle "Save" button clicks
-            document.querySelectorAll('.btn-secondary').forEach(btn => {
-                btn.addEventListener('click', function () {
-                    const eventId = this.getAttribute('data-event-id');
-                    const isCurrentlySaved = this.classList.contains('saved');
-
-                    // Check if user is logged in
-                    const userEmail = getCurrentUser();
-
-                    if (isCurrentlySaved) {
-                        // Unsave the event (only if logged in)
-                        if (userEmail) {
-                            unsaveEvent(eventId).then(() => {
-                                this.classList.remove('saved');
-                                this.textContent = 'Save';
-
-                                // Refresh saved events view if it's active
-                                const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
-                                if (activeTab === 'saved') {
-                                    renderSavedEvents();
-                                }
-                            });
+        });
+        
+        document.querySelectorAll('.btn-secondary').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const eventId = this.getAttribute('data-event-id');
+                const isCurrentlySaved = this.classList.contains('saved');
+                
+                if (isCurrentlySaved) {
+                    const success = await unsaveEvent(eventId);
+                    if (success) {
+                        this.classList.remove('saved');
+                        this.textContent = 'Save';
+                        
+                        const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
+                        if (activeTab === 'saved') {
+                            renderSavedEvents();
                         }
-                    } else {
-                        // If not logged in, show login prompt
-                        if (!userEmail) {
-                            showLoginSection();
-                            // Focus on email input
-                            setTimeout(() => {
-                                document.getElementById('login-input').focus();
-                            }, 100);
-                            return;
-                        }
-
-                        // Save the event (user is logged in)
-                        saveEvent(eventId).then(() => {
-                            this.classList.add('saved');
-                            this.textContent = 'Saved';
-                        });
-
-                        // Fire Google Analytics event
+                    }
+                } else {
+                    const user = getCurrentUser();
+                    
+                    if (!user) {
+                        showLoginSection();
+                        setTimeout(() => {
+                            document.getElementById('login-input').focus();
+                        }, 100);
+                        return;
+                    }
+                    
+                    const success = await saveEvent(eventId);
+                    if (success) {
+                        this.classList.add('saved');
+                        this.textContent = 'Saved';
+                        
                         if (typeof gtag !== 'undefined') {
                             gtag('event', 'event_saved', {
                                 'event_id': eventId
                             });
                         }
                     }
-                });
+                }
             });
-        }
-
-        // ============================================================================
-        // TAB NAVIGATION
-        // ============================================================================
-        function switchTab(tabName) {
-            // Check if user is logged in for saved events tab
-            if (tabName === 'saved' && !getCurrentUser()) {
-                showLoginSection();
-                // Switch back to all events tab
-                document.querySelectorAll('.nav-tab').forEach(tab => {
-                    if (tab.getAttribute('data-tab') === 'all') {
-                        tab.classList.add('active');
-                    } else {
-                        tab.classList.remove('active');
-                    }
-                });
-                return;
-            }
-
-            // Update tab buttons
+        });
+    }
+    
+    // ============================================================================
+    // TAB NAVIGATION
+    // ============================================================================
+    function switchTab(tabName) {
+        if (tabName === 'saved' && !getCurrentUser()) {
+            showLoginSection();
             document.querySelectorAll('.nav-tab').forEach(tab => {
-                if (tab.getAttribute('data-tab') === tabName) {
+                if (tab.getAttribute('data-tab') === 'all') {
                     tab.classList.add('active');
                 } else {
                     tab.classList.remove('active');
                 }
             });
-
-            // Show/hide sections
-            if (tabName === 'all') {
-                document.getElementById('events-list').classList.remove('section-hidden');
-                document.getElementById('saved-events-list').classList.add('section-hidden');
-                renderEvents();
-            } else {
-                document.getElementById('events-list').classList.add('section-hidden');
-                document.getElementById('saved-events-list').classList.remove('section-hidden');
-                renderSavedEvents();
-            }
+            return;
         }
-
-        // ============================================================================
-        // LOGIN FORM HANDLING
-        // ============================================================================
-        document.getElementById('login-form').addEventListener('submit', function (e) {
-            e.preventDefault();
-
-            const email = document.getElementById('login-input').value.trim();
-
-            // Basic email validation
-            if (!email || !email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
-                return;
-            }
-
-            setCurrentUser(email);
-            updateLoginUI();
-
-            // Fire Google Analytics event for signup
-            if (typeof gtag !== 'undefined') {
-                gtag('event', 'email_submitted', {
-                    'email': email
-                });
-            }
-
-            // Clear input
-            document.getElementById('login-input').value = '';
-
-            // Re-render events to update save button states
-            renderEvents();
-        });
-
-        // Logout button
-        document.getElementById('logout-btn').addEventListener('click', function () {
-            clearCurrentUser();
-            updateLoginUI();
-            // Switch to all events tab when logging out and refresh
-            switchTab('all');
-            // Refresh events to clear saved states (since saved events are user-specific)
-            renderEvents();
-        });
-
-        // ============================================================================
-        // TAB NAVIGATION HANDLERS
-        // ============================================================================
+        
         document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.addEventListener('click', function () {
-                const tabName = this.getAttribute('data-tab');
-                switchTab(tabName);
-            });
-        });
-
-        // ============================================================================
-        // RETURN VISIT TRACKING (Market Research)
-        // ============================================================================
-        async function trackReturnVisit() {
-            // Generate or retrieve user ID
-            let userId = localStorage.getItem('webiBookUserId');
-            let isNewUser = false;
-
-            if (!userId) {
-                // Create new user ID
-                userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('webiBookUserId', userId);
-                isNewUser = true;
-
-                // Track first visit timestamp
-                const now = new Date().toISOString();
-                localStorage.setItem('webiBookFirstVisit', now);
-                localStorage.setItem('webiBookVisitCount', '1');
-                localStorage.setItem('webiBookLastVisit', now);
+            if (tab.getAttribute('data-tab') === tabName) {
+                tab.classList.add('active');
             } else {
-                // Existing user - update visit count
-                const visitCount = parseInt(localStorage.getItem('webiBookVisitCount') || '0');
-                const lastVisit = localStorage.getItem('webiBookLastVisit');
-                const newCount = visitCount + 1;
-
-                localStorage.setItem('webiBookVisitCount', newCount.toString());
-                localStorage.setItem('webiBookLastVisit', new Date().toISOString());
-
-                // Calculate days since last visit
-                let daysSince = 0;
-                if (lastVisit) {
-                    const lastVisitDate = new Date(lastVisit);
-                    daysSince = Math.floor((new Date() - lastVisitDate) / (1000 * 60 * 60 * 24));
-                }
-
-                // Track return visit
-                if (typeof gtag !== 'undefined') {
-                    gtag('event', 'return_visit', {
-                        'visit_count': newCount,
-                        'days_since_last_visit': daysSince
-                    });
-                }
+                tab.classList.remove('active');
             }
-
-            // Send to backend with user ID
-            const visitResponse = await callAPI('/visits', 'POST', {
-                userId: userId,
-                isNewUser: isNewUser
-            });
-
-            // For backward compatibility
-            const firstVisit = localStorage.getItem('webiBookFirstVisit');
-            const visitCount = parseInt(localStorage.getItem('webiBookVisitCount') || '0');
-            const lastVisit = localStorage.getItem('webiBookLastVisit');
-
-            let daysSince = 0;
-            if (lastVisit) {
-                const lastVisitDate = new Date(lastVisit);
-                daysSince = Math.floor((new Date() - lastVisitDate) / (1000 * 60 * 60 * 24));
-            }
-
-            return {
-                isReturning: !isNewUser,
-                visitCount: visitCount,
-                daysSince: daysSince,
-                userId: userId
-            };
+        });
+        
+        if (tabName === 'all') {
+            document.getElementById('events-list').classList.remove('section-hidden');
+            document.getElementById('saved-events-list').classList.add('section-hidden');
+            renderEvents();
+        } else {
+            document.getElementById('events-list').classList.add('section-hidden');
+            document.getElementById('saved-events-list').classList.remove('section-hidden');
+            renderSavedEvents();
         }
-
-        let visitInfoCache = null;
-
-        async function getVisitInfo() {
-            if (!visitInfoCache) {
-                visitInfoCache = await trackReturnVisit();
-            }
-            return visitInfoCache;
+    }
+    
+    // ============================================================================
+    // FORM HANDLERS
+    // ============================================================================
+    document.getElementById('login-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('login-input').value.trim();
+        const name = email.split('@')[0];
+        
+        if (!email || !email.includes('@') || !email.includes('.')) {
+            alert('Please enter a valid email address');
+            return;
         }
-
-        async function updateVisitorStatus() {
-            const visitInfo = await getVisitInfo();
-            const statusElement = document.getElementById('visitor-status');
-
-            if (statusElement) {
-                if (visitInfo && visitInfo.isReturning) {
-                    if (visitInfo.daysSince === 0) {
-                        statusElement.textContent = 'Welcome back! You visited earlier today.';
-                    } else if (visitInfo.daysSince === 1) {
-                        statusElement.textContent = 'Welcome back! You visited yesterday.';
-                    } else {
-                        statusElement.textContent = `Welcome back! You visited ${visitInfo.daysSince} days ago.`;
-                    }
-                } else {
-                    statusElement.textContent = 'First time here? Get weekly reminders to never miss an event.';
-                }
-            }
+        
+        const user = await registerOrLoginUser(email, '', name);
+        
+        if (user) {
+            document.getElementById('login-input').value = '';
+            renderEvents();
+            alert(`Welcome ${name}! You can now save events.`);
+        } else {
+            alert('Failed to login. Please try again.');
         }
-
-        // ============================================================================
-        // EVENT INTERACTION TRACKING (Market Research)
-        // ============================================================================
-        function trackEventView(eventId, eventTitle) {
-            // Track which events users view
-            if (typeof gtag !== 'undefined') {
-                gtag('event', 'event_viewed', {
-                    'event_id': eventId,
-                    'event_name': eventTitle
-                });
-            }
+    });
+    
+    document.getElementById('logout-btn').addEventListener('click', function() {
+        clearCurrentUser();
+        switchTab('all');
+        renderEvents();
+    });
+    
+    document.getElementById('email-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('email-input').value.trim();
+        
+        if (!email || !email.includes('@') || !email.includes('.')) {
+            alert('Please enter a valid email address');
+            return;
         }
-
-        function trackTimeOnPage() {
-            const startTime = Date.now();
-
-            // Track time when user leaves
-            window.addEventListener('beforeunload', function () {
-                const timeSpent = Math.floor((Date.now() - startTime) / 1000); // seconds
-
-                if (typeof gtag !== 'undefined') {
-                    gtag('event', 'time_on_page', {
-                        'time_spent_seconds': timeSpent
-                    });
-                }
-            });
-        }
-
-        // ============================================================================
-        // EMAIL FORM HANDLING (Weekly Reminders)
-        // ============================================================================
-        document.getElementById('email-form').addEventListener('submit', async function (e) {
-            e.preventDefault(); // Prevent page reload
-
-            const email = document.getElementById('email-input').value.trim();
-
-            // Basic email validation
-            if (!email || !email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
-                return;
-            }
-
-            // Store email for weekly reminders (separate from login email)
-            const weeklyEmails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
-            if (!weeklyEmails.includes(email)) {
-                weeklyEmails.push(email);
-                localStorage.setItem('webiBookWeeklyEmails', JSON.stringify(weeklyEmails));
-            }
-
-            // Also save to backend
-            await callAPI('/emails', 'POST', { email: email });
-
-            console.log('Weekly reminder email submitted:', email);
-
-            // Fire Google Analytics event with more context
+        
+        const success = await subscribeToEmails(email);
+        
+        if (success) {
+            document.getElementById('email-input').value = '';
+            alert('Thanks! You\'ll receive weekly event reminders every Monday.');
+            
             const visitInfo = await getVisitInfo();
             if (typeof gtag !== 'undefined' && visitInfo) {
                 gtag('event', 'weekly_reminder_signup', {
@@ -1511,629 +1443,421 @@
                     'visit_count': visitInfo.visitCount
                 });
             }
-
-            // Clear input and show feedback
-            document.getElementById('email-input').value = '';
-            alert('Thanks! You\'ll receive weekly event reminders every Monday.');
+        } else {
+            alert('Failed to subscribe. Please try again.');
+        }
+    });
+    
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            switchTab(tabName);
         });
-
-        // ============================================================================
-        // INITIALIZE
-        // ============================================================================
-        // Clear old test data (migration from old storage format)
-        clearOldTestData();
-
-        // Track return visits and update visitor status (async, don't block)
-        updateVisitorStatus().catch(console.error);
-
-        // Track time spent on page
-        trackTimeOnPage();
-
-        // Initialize login UI
-        updateLoginUI();
-
-        // Render events when page loads
-        renderEvents();
-
-        // Initialize admin dashboard access (password protected)
-        initAdminAccess();
-
-        // Page view is automatically tracked by GA4 config in the head
-        // Additional tracking:
-        // - first_visit: When user visits for the first time
-        // - return_visit: When user comes back (with visit count and days since)
-        // - event_viewed: Every time an event is displayed
-        // - event_click: When user clicks "Go to event"
-        // - event_saved: When user saves an event
-        // - weekly_reminder_signup: When user signs up for weekly emails
-        // - time_on_page: Time spent when user leaves
-
-        // ============================================================================
-        // ADMIN DASHBOARD - PASSWORD PROTECTED ANALYTICS
-        // ============================================================================
-        let engagementChart = null;
-        let visitsChart = null;
-
-        // Authenticate admin access
-        function authenticateAdmin() {
-            const password = document.getElementById('admin-password-input').value;
-            const errorMsg = document.getElementById('admin-error');
-
-            if (password === window.ADMIN_PASSWORD) {
+    });
+    
+    // ============================================================================
+    // ADMIN DASHBOARD - MONGODB BASED
+    // ============================================================================
+    let engagementChart = null;
+    let visitsChart = null;
+    let retentionChart = null;
+    
+    function authenticateAdmin() {
+        const password = document.getElementById('admin-password-input').value;
+        const errorMsg = document.getElementById('admin-error');
+        
+        if (password === window.ADMIN_PASSWORD) {
+            localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+            document.getElementById('admin-login-overlay').classList.remove('active');
+            document.getElementById('admin-dashboard').classList.add('active');
+            setTimeout(() => {
+                loadDashboardData();
+            }, 100);
+        } else {
+            errorMsg.style.display = 'block';
+            document.getElementById('admin-password-input').value = '';
+        }
+    }
+    
+    function closeAdminDashboard() {
+        document.getElementById('admin-dashboard').classList.remove('active');
+        localStorage.removeItem('webiBookAdminAuth');
+    }
+    
+    function initAdminAccess() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlAdminParam = urlParams.get('admin');
+        
+        if (urlAdminParam !== null) {
+            if (urlAdminParam === window.ADMIN_PASSWORD) {
                 localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
-                document.getElementById('admin-login-overlay').classList.remove('active');
                 document.getElementById('admin-dashboard').classList.add('active');
-                // Wait a bit for Chart.js to be ready, then load data
                 setTimeout(() => {
                     loadDashboardData();
-                }, 100);
+                }, 200);
             } else {
-                errorMsg.style.display = 'block';
-                document.getElementById('admin-password-input').value = '';
+                document.getElementById('admin-login-overlay').classList.add('active');
             }
         }
-
-        // Close dashboard
-        function closeAdminDashboard() {
-            document.getElementById('admin-dashboard').classList.remove('active');
-            localStorage.removeItem('webiBookAdminAuth');
-        }
-
-        // Check admin access on page load
-        function initAdminAccess() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlAdminParam = urlParams.get('admin');
-
-            // ONLY show admin panel if ?admin is explicitly in the URL
-            if (urlAdminParam !== null) {
-                if (urlAdminParam === window.ADMIN_PASSWORD) {
-                    // Correct password in URL - auto-open dashboard
-                    localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
-                    document.getElementById('admin-dashboard').classList.add('active');
-                    // Wait for Chart.js to load
-                    setTimeout(() => {
-                        loadDashboardData();
-                    }, 200);
-                } else {
-                    // ?admin in URL but wrong/no password - show login
-                    document.getElementById('admin-login-overlay').classList.add('active');
+    }
+    
+    async function loadDashboardData() {
+        document.getElementById('metric-emails').textContent = '...';
+        document.getElementById('metric-users').textContent = '...';
+        document.getElementById('metric-saved').textContent = '...';
+        document.getElementById('metric-returns').textContent = '...';
+        document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+        document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+        
+        try {
+            const adminPassword = window.ADMIN_PASSWORD;
+            const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
+            
+            if (response && response.success) {
+                const data = response.dashboard;
+                
+                document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
+                document.getElementById('metric-users').textContent = data.metrics.totalUsers;
+                document.getElementById('metric-saved').textContent = await calculateTotalSavedEvents(data.users);
+                document.getElementById('metric-returns').textContent = data.metrics.returnRate;
+                document.getElementById('metric-returns-detail').textContent = 
+                    `${data.metrics.activeUsers} active / ${data.metrics.totalUsers} total`;
+                
+                populateEmailsTable(data.emailSubscriptions);
+                populateUsersTable(data.users);
+                populateEventClicksTable(data.eventClicks);
+                
+                createEngagementChart(
+                    data.metrics.emailSubscriptions,
+                    data.metrics.totalUsers,
+                    await calculateTotalSavedEvents(data.users)
+                );
+                
+                createVisitsChart(
+                    data.metrics.totalVisits - data.metrics.uniqueVisitors,
+                    data.metrics.uniqueVisitors
+                );
+                
+                if (data.dailyStats && data.dailyStats.length > 0) {
+                    createRetentionChart(data.dailyStats);
                 }
             }
-            // Regular users (no ?admin in URL) see nothing - completely hidden
+        } catch (error) {
+            console.error('Dashboard error:', error);
         }
-
-                // Load and display dashboard data from backend API
-        async function loadDashboardData() {
-            // Show loading state
-            document.getElementById('metric-emails').textContent = '...';
-            document.getElementById('metric-users').textContent = '...';
-            document.getElementById('metric-saved').textContent = '...';
-            document.getElementById('metric-returns').textContent = '...';
-            document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>';
-            document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>';
-            
-            // Try to fetch from backend API first
-            const apiData = await callAPI('/data');
-            
-            let weeklyEmails = [];
-            let savedEventsByUser = {};
-            let totalSavedEvents = 0;
-            let eventClicks = {};
-            
-            if (apiData) {
-                console.log('📊 Backend data received:', apiData);
-                
-                // Use data from backend API (aggregated from all users/devices)
-                // Handle both old format (array of strings) and new format (array of objects)
-                weeklyEmails = apiData.weeklyEmails || [];
-                
-                savedEventsByUser = apiData.savedEvents || {};
-                totalSavedEvents = Object.values(savedEventsByUser).reduce((sum, events) => sum + events.length, 0);
-                eventClicks = apiData.eventClicks || {};
-            } else {
-                // Fallback to localStorage if API is unavailable
-                console.warn('Backend API unavailable, using localStorage data');
-                weeklyEmails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
-                
-                Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('webiBookSavedEvents_')) {
-                        const email = key.replace('webiBookSavedEvents_', '');
-                        const events = JSON.parse(localStorage.getItem(key) || '[]');
-                        if (events.length > 0) {
-                            savedEventsByUser[email] = events;
-                            totalSavedEvents += events.length;
-                        }
-                    }
-                });
-            }
-            
-            // Update metrics - FIXED CALCULATION
-            document.getElementById('metric-emails').textContent = weeklyEmails.length;
-            document.getElementById('metric-users').textContent = Object.keys(savedEventsByUser).length;
-            document.getElementById('metric-saved').textContent = totalSavedEvents;
-            
-            // CORRECT calculation from backend
-            const uniqueUsers = apiData?.visitStats?.uniqueUsers || Object.keys(apiData?.userSessions || {}).length || 0;
-            
-            // Calculate REAL return rate (users who returned, not visits)
-            const totalUniqueUsers = uniqueUsers;
-            const usersWithMultipleVisits = Object.values(apiData?.userSessions || {}).filter(user => user.visits > 1).length;
-            const realReturnRate = totalUniqueUsers > 0 ? Math.round((usersWithMultipleVisits / totalUniqueUsers) * 100) : 0;
-            
-            document.getElementById('metric-returns').textContent = realReturnRate + '%';
-            document.getElementById('metric-returns-detail').textContent = `${usersWithMultipleVisits} returned / ${totalUniqueUsers} unique users`;
-            
-            // Populate emails table - FIXED to handle both string and object
-            const emailsTableBody = document.getElementById('emails-table-body');
-            if (weeklyEmails.length > 0) {
-                emailsTableBody.innerHTML = weeklyEmails.map((email, index) => {
-                    // Handle both string and object formats
-                    const emailStr = typeof email === 'string' ? email : (email.email || 'Unknown');
-                    const timestamp = email.timestamp ? new Date(email.timestamp).toLocaleDateString() : 'N/A';
-                    return `<tr>
-                        <td>${index + 1}</td>
-                        <td>${emailStr}</td>
-                        <td>${timestamp}</td>
-                    </tr>`;
-                }).join('');
-            } else {
-                emailsTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">No emails collected yet</td></tr>';
-            }
-            
-            // Populate saved events table - FIXED to handle empty data
-            const savedEventsTableBody = document.getElementById('saved-events-table-body');
-            const userEmails = Object.keys(savedEventsByUser);
-            if (userEmails.length > 0) {
-                savedEventsTableBody.innerHTML = userEmails.map(email => {
-                    const events = savedEventsByUser[email] || [];
-                    return `<tr>
-                        <td>${email}</td>
-                        <td>${events.length}</td>
-                        <td>${events.join(', ')}</td>
-                    </tr>`;
-                }).join('');
-            } else {
-                savedEventsTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">No saved events yet</td></tr>';
-            }
-            
-            // Populate event clicks table - FIXED to handle undefined data
-            const eventClicksTableBody = document.getElementById('event-clicks-table-body');
-            if (eventClicks && Object.keys(eventClicks).length > 0) {
-                const clicksArray = Object.values(eventClicks).sort((a, b) => b.count - a.count);
-                eventClicksTableBody.innerHTML = clicksArray.map(click => {
-                    const lastClicked = click.lastClicked ? new Date(click.lastClicked).toLocaleString() : 'Never';
-                    return `<tr>
-                        <td>${click.id}</td>
-                        <td>${click.title || click.id}</td>
+    }
+    
+    async function calculateTotalSavedEvents(users) {
+        if (!users) return 0;
+        return users.reduce((total, user) => total + (user.savedEvents?.length || 0), 0);
+    }
+    
+    function populateEmailsTable(emails) {
+        const tableBody = document.getElementById('emails-table-body');
+        
+        if (emails && emails.length > 0) {
+            tableBody.innerHTML = emails.map((email, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${email.email}</td>
+                    <td>${new Date(email.subscribedAt).toLocaleDateString()}</td>
+                </tr>
+            `).join('');
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="3">No emails collected yet</td></tr>';
+        }
+    }
+    
+    function populateUsersTable(users) {
+        const tableBody = document.getElementById('saved-events-table-body');
+        
+        if (users && users.length > 0) {
+            tableBody.innerHTML = users.map(user => {
+                const savedEvents = user.savedEvents || [];
+                return `
+                    <tr>
+                        <td>${user.email}</td>
+                        <td>${savedEvents.length}</td>
+                        <td>${savedEvents.map(e => e.eventId).join(', ') || 'None'}</td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="3">No users yet</td></tr>';
+        }
+    }
+    
+    function populateEventClicksTable(eventClicks) {
+        const tableBody = document.getElementById('event-clicks-table-body');
+        
+        if (eventClicks && eventClicks.length > 0) {
+            tableBody.innerHTML = eventClicks.map(click => {
+                const lastClicked = click.lastClicked ? new Date(click.lastClicked).toLocaleString() : 'Never';
+                return `
+                    <tr>
+                        <td>${click._id || click.id}</td>
+                        <td>${click.title || 'Event'}</td>
                         <td>${click.topic || 'N/A'}</td>
-                        <td><strong>${click.count}</strong></td>
+                        <td><strong>${click.count || 0}</strong></td>
                         <td>${lastClicked}</td>
-                    </tr>`;
-                }).join('');
-            } else {
-                eventClicksTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">No event clicks tracked yet</td></tr>';
-            }
-            
-            // Wait for Chart.js to be available, then create charts
-            function tryCreateCharts() {
-                if (typeof Chart !== 'undefined') {
-                    // Create engagement chart
-                    createEngagementChart(weeklyEmails.length, Object.keys(savedEventsByUser).length, totalSavedEvents);
-                    
-                    // Create visits chart with actual data
-                    const firstVisits = apiData?.visitStats?.firstVisits || 0;
-                    const returnVisits = apiData?.visitStats?.returnVisits || 0;
-                    createVisitsChart(firstVisits, returnVisits);
-                    
-                    // Load retention analytics
-                    loadRetentionAnalytics();
-                } else {
-                    // Retry after a short delay
-                    setTimeout(tryCreateCharts, 100);
-                }
-            }
-            
-            tryCreateCharts();
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="5">No event clicks tracked yet</td></tr>';
+        }
+    }
+    
+    function createEngagementChart(emailCount, userCount, savedCount) {
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js not loaded');
+            return;
         }
         
-        // Function to load retention analytics
-        async function loadRetentionAnalytics() {
-            try {
-                const response = await callAPI('/analytics/retention');
-                if (response && response.success) {
-                    const metrics = response.metrics;
-                    
-                    // Update or create retention cards
-                    let metricsGrid = document.querySelector('.metrics-grid');
-                    
-                    // Check if retention metrics already exist
-                    if (!document.getElementById('metric-dau')) {
-                        // Add new retention cards
-                        metricsGrid.innerHTML += `
-                            <div class="metric-card">
-                                <h3>Daily Active</h3>
-                                <p class="value" id="metric-dau">${metrics.dailyActiveUsers}</p>
-                                <p class="change">Active last 24h</p>
-                            </div>
-                            <div class="metric-card">
-                                <h3>Avg Visits/User</h3>
-                                <p class="value" id="metric-avg-visits">${metrics.averageVisitsPerUser}</p>
-                                <p class="change">Engagement level</p>
-                            </div>
-                        `;
-                    } else {
-                        // Update existing cards
-                        document.getElementById('metric-dau').textContent = metrics.dailyActiveUsers;
-                        document.getElementById('metric-avg-visits').textContent = metrics.averageVisitsPerUser;
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading retention analytics:', error);
-            }
+        const ctx = document.getElementById('engagement-chart');
+        if (!ctx) return;
+        
+        if (engagementChart) {
+            engagementChart.destroy();
         }
-
-                // Create retention chart function
-        function createRetentionChart(cohorts) {
-            // Check if Chart.js is loaded
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js not loaded. Cannot create retention chart.');
-                return;
-            }
-            
-            // Find or create canvas for retention chart
-            let retentionChartCanvas = document.getElementById('retention-chart');
-            if (!retentionChartCanvas) {
-                // Create new section for retention chart
-                const visitsSection = document.querySelector('.dashboard-section:has(#visits-chart)');
-                if (visitsSection) {
-                    visitsSection.innerHTML += `
-                        <h3>Retention Cohorts</h3>
-                        <div class="chart-container">
-                            <canvas id="retention-chart"></canvas>
-                        </div>
-                    `;
-                    retentionChartCanvas = document.getElementById('retention-chart');
-                }
-            }
-            
-            if (!retentionChartCanvas) return;
-            
-            // Destroy existing chart if any
-            if (window.retentionChart) {
-                window.retentionChart.destroy();
-            }
-            
-            if (cohorts && cohorts.length > 0) {
-                // Prepare data
-                const labels = cohorts.map(c => c.date);
-                const day1Data = cohorts.map(c => 
-                    c.totalUsers > 0 ? Math.round((c.returnedDay1 / c.totalUsers) * 100) : 0
-                );
-                const day7Data = cohorts.map(c => 
-                    c.totalUsers > 0 ? Math.round((c.returnedDay7 / c.totalUsers) * 100) : 0
-                );
-                const day30Data = cohorts.map(c => 
-                    c.totalUsers > 0 ? Math.round((c.returnedDay30 / c.totalUsers) * 100) : 0
-                );
-                
-                window.retentionChart = new Chart(retentionChartCanvas, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: 'Day 1 Retention',
-                                data: day1Data,
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                tension: 0.1
-                            },
-                            {
-                                label: 'Day 7 Retention',
-                                data: day7Data,
-                                borderColor: 'rgba(255, 159, 64, 1)',
-                                backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                                tension: 0.1
-                            },
-                            {
-                                label: 'Day 30 Retention',
-                                data: day30Data,
-                                borderColor: 'rgba(153, 102, 255, 1)',
-                                backgroundColor: 'rgba(153, 102, 255, 0.2)',
-                                tension: 0.1
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: 100,
-                                ticks: {
-                                    callback: function(value) {
-                                        return value + '%';
-                                    }
-                                },
-                                title: {
-                                    display: true,
-                                    text: 'Retention Rate'
-                                }
-                            },
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Cohort Date'
-                                }
-                            }
-                        },
-                        plugins: {
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return context.dataset.label + ': ' + context.parsed.y + '%';
-                                    }
-                                }
-                            }
-                        }
+        
+        engagementChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Email Signups', 'Active Users', 'Saved Events'],
+                datasets: [{
+                    label: 'Count',
+                    data: [emailCount, userCount, savedCount],
+                    backgroundColor: [
+                        'rgba(26, 26, 26, 0.8)',
+                        'rgba(26, 26, 26, 0.6)',
+                        'rgba(26, 26, 26, 0.4)'
+                    ],
+                    borderColor: [
+                        'rgba(26, 26, 26, 1)',
+                        'rgba(26, 26, 26, 1)',
+                        'rgba(26, 26, 26, 1)'
+                    ],
+                    borderWidth: 2,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 13 }
                     }
-                });
-            }
-        }
-
-        // Create engagement chart
-        function createEngagementChart(emailCount, userCount, savedCount) {
-            // Check if Chart.js is loaded
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js not loaded. Please wait and try again.');
-                document.getElementById('engagement-chart').parentElement.innerHTML =
-                    '<p style="color: #999; text-align: center; padding: 40px;">Chart loading... Please refresh if it doesn\'t appear.</p>';
-                return;
-            }
-
-            const ctx = document.getElementById('engagement-chart');
-            if (!ctx) return;
-
-            if (engagementChart) {
-                engagementChart.destroy();
-            }
-
-            engagementChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Email Signups', 'Active Users', 'Saved Events'],
-                    datasets: [{
-                        label: 'Count',
-                        data: [emailCount, userCount, savedCount],
-                        backgroundColor: [
-                            'rgba(26, 26, 26, 0.8)',
-                            'rgba(26, 26, 26, 0.6)',
-                            'rgba(26, 26, 26, 0.4)'
-                        ],
-                        borderColor: [
-                            'rgba(26, 26, 26, 1)',
-                            'rgba(26, 26, 26, 1)',
-                            'rgba(26, 26, 26, 1)'
-                        ],
-                        borderWidth: 2,
-                        borderRadius: 4
-                    }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: {
-                        duration: 1000,
-                        easing: 'easeInOutQuart'
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1, font: { size: 12 } },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)' }
                     },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            titleFont: {
-                                size: 14,
-                                weight: 'bold'
-                            },
-                            bodyFont: {
-                                size: 13
-                            },
-                            callbacks: {
-                                label: function (context) {
-                                    return context.dataset.label + ': ' + context.parsed.y;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1,
-                                font: {
-                                    size: 12
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                font: {
-                                    size: 12
-                                }
-                            },
-                            grid: {
-                                display: false
-                            }
-                        }
+                    x: {
+                        ticks: { font: { size: 12 } },
+                        grid: { display: false }
                     }
                 }
-            });
-        }
-
-        // Create visits chart
-        function createVisitsChart(firstVisits, returnVisits) {
-            // Check if Chart.js is loaded
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js not loaded. Please wait and try again.');
-                document.getElementById('visits-chart').parentElement.innerHTML =
-                    '<p style="color: #999; text-align: center; padding: 40px;">Chart loading... Please refresh if it doesn\'t appear.</p>';
-                return;
-            }
-
-            const ctx = document.getElementById('visits-chart');
-            if (!ctx) return;
-
-            if (visitsChart) {
-                visitsChart.destroy();
-            }
-
-            visitsChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['First Visits', 'Return Visits'],
-                    datasets: [{
-                        data: [firstVisits, returnVisits],
-                        backgroundColor: [
-                            'rgba(26, 26, 26, 0.8)',
-                            'rgba(26, 26, 26, 0.4)'
-                        ],
-                        borderColor: [
-                            'rgba(26, 26, 26, 1)',
-                            'rgba(26, 26, 26, 1)'
-                        ],
-                        borderWidth: 3
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: {
-                        animateRotate: true,
-                        animateScale: true,
-                        duration: 1000
-                    },
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 15,
-                                font: {
-                                    size: 13
-                                }
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            callbacks: {
-                                label: function (context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${label}: ${value} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // Copy all emails (from backend API)
-        async function copyAllEmails() {
-            // Try to fetch from backend API first
-            const apiData = await callAPI('/data');
-
-            let emails;
-            if (apiData && apiData.weeklyEmails) {
-                // Handle both old format (array of strings) and new format (array of objects)
-                if (typeof apiData.weeklyEmails[0] === 'string') {
-                    emails = apiData.weeklyEmails;
-                } else {
-                    emails = apiData.weeklyEmails.map(item => item.email || item);
-                }
-            } else {
-                // Fallback to localStorage
-                emails = JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]');
-            }
-
-            const emailList = emails.join('\n');
-            navigator.clipboard.writeText(emailList).then(() => {
-                alert(`Copied ${emails.length} emails to clipboard!`);
-            });
-        }
-
-        // Export all data (from backend API)
-        async function exportAllData() {
-            // Try to fetch from backend API first
-            const apiData = await callAPI('/data');
-
-            let allData;
-            if (apiData) {
-                // Use aggregated data from backend
-                allData = apiData;
-            } else {
-                // Fallback to localStorage
-                allData = {
-                    weeklyEmails: JSON.parse(localStorage.getItem('webiBookWeeklyEmails') || '[]'),
-                    savedEvents: {},
-                    visitStats: {
-                        firstVisit: localStorage.getItem('webiBookFirstVisit'),
-                        visitCount: localStorage.getItem('webiBookVisitCount'),
-                        lastVisit: localStorage.getItem('webiBookLastVisit')
-                    }
-                };
-
-                Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('webiBookSavedEvents_')) {
-                        const email = key.replace('webiBookSavedEvents_', '');
-                        allData.savedEvents[email] = JSON.parse(localStorage.getItem(key) || '[]');
-                    }
-                });
-            }
-
-            const dataStr = JSON.stringify(allData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `webiBook-data-${new Date().toISOString().split('T')[0]}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
-        }
-
-        // Clear all data
-        function clearAllData() {
-            if (confirm('⚠️ Are you sure you want to clear ALL tracking data? This cannot be undone.')) {
-                Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('webiBook') && key !== 'webiBookAdminAuth') {
-                        localStorage.removeItem(key);
-                    }
-                });
-                alert('All data cleared! Refreshing dashboard...');
-                loadDashboardData();
-            }
-        }
-
-        // Allow Enter key to submit admin password
-        document.addEventListener('DOMContentLoaded', function () {
-            const passwordInput = document.getElementById('admin-password-input');
-            if (passwordInput) {
-                passwordInput.addEventListener('keypress', function (e) {
-                    if (e.key === 'Enter') {
-                        authenticateAdmin();
-                    }
-                });
             }
         });
-    </script>
+    }
+    
+    function createVisitsChart(firstVisits, returnVisits) {
+        if (typeof Chart === 'undefined') return;
+        
+        const ctx = document.getElementById('visits-chart');
+        if (!ctx) return;
+        
+        if (visitsChart) {
+            visitsChart.destroy();
+        }
+        
+        visitsChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['First Visits', 'Return Visits'],
+                datasets: [{
+                    data: [firstVisits, returnVisits],
+                    backgroundColor: [
+                        'rgba(26, 26, 26, 0.8)',
+                        'rgba(26, 26, 26, 0.4)'
+                    ],
+                    borderColor: [
+                        'rgba(26, 26, 26, 1)',
+                        'rgba(26, 26, 26, 1)'
+                    ],
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 15, font: { size: 13 } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function createRetentionChart(dailyStats) {
+        if (typeof Chart === 'undefined') return;
+        
+        let retentionChartCanvas = document.getElementById('retention-chart');
+        if (!retentionChartCanvas) {
+            const visitsSection = document.querySelector('.dashboard-section:has(#visits-chart)');
+            if (visitsSection) {
+                visitsSection.innerHTML += `
+                    <h3>Daily Activity (Last 30 Days)</h3>
+                    <div class="chart-container">
+                        <canvas id="retention-chart"></canvas>
+                    </div>
+                `;
+                retentionChartCanvas = document.getElementById('retention-chart');
+            }
+        }
+        
+        if (!retentionChartCanvas) return;
+        
+        if (retentionChart) {
+            retentionChart.destroy();
+        }
+        
+        const labels = dailyStats.map(stat => stat._id);
+        const visitsData = dailyStats.map(stat => stat.visits);
+        const newUsersData = dailyStats.map(stat => stat.newUsers || 0);
+        
+        retentionChart = new Chart(retentionChartCanvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Total Visits',
+                        data: visitsData,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'New Users',
+                        data: newUsersData,
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Count' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Date' }
+                    }
+                }
+            }
+        });
+    }
+    
+    async function copyAllEmails() {
+        try {
+            const adminPassword = window.ADMIN_PASSWORD;
+            const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
+            
+            if (response && response.success) {
+                const emails = response.dashboard.emailSubscriptions || [];
+                const emailList = emails.map(e => e.email).join('\n');
+                
+                if (navigator.clipboard && emailList) {
+                    await navigator.clipboard.writeText(emailList);
+                    alert(`Copied ${emails.length} emails to clipboard!`);
+                }
+            }
+        } catch (error) {
+            console.error('Copy emails error:', error);
+        }
+    }
+    
+    async function exportAllData() {
+        try {
+            const adminPassword = window.ADMIN_PASSWORD;
+            const response = await fetch(`${API_BASE_URL}/admin/export?password=${adminPassword}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                const dataStr = JSON.stringify(data, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `webiBook-data-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+        }
+    }
+    
+    function clearAllData() {
+        if (confirm('⚠️ Are you sure you want to clear ALL tracking data? This cannot be undone.')) {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('webiBook') && key !== 'webiBookAdminAuth') {
+                    localStorage.removeItem(key);
+                }
+            });
+            alert('All data cleared! Refreshing dashboard...');
+            loadDashboardData();
+        }
+    }
+    
+    // ============================================================================
+    // INITIALIZATION
+    // ============================================================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const passwordInput = document.getElementById('admin-password-input');
+        if (passwordInput) {
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    authenticateAdmin();
+                }
+            });
+        }
+        
+        updateLoginUI();
+        loadEvents();
+        updateVisitorStatus().catch(console.error);
+        trackTimeOnPage();
+        initAdminAccess();
+    });
+</script>
 </body>
 
 </html>
