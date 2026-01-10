@@ -1,4 +1,4 @@
-// models/User.js - FIXED VERSION
+// models/User.js - SIMPLIFIED VERSION
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -15,18 +15,42 @@ const userSchema = new mongoose.Schema({
     },
     savedEvents: [{
         eventId: String,
-        savedAt: { type: Date, default: Date.now }
+        savedAt: { 
+            type: Date, 
+            default: Date.now 
+        }
     }],
     deviceInfo: {
-        userAgent: { type: String, default: '' },
-        browser: { type: String, default: '' },
-        os: { type: String, default: '' },
-        timezone: { type: String, default: '' }
+        userAgent: { 
+            type: String, 
+            default: '' 
+        },
+        browser: { 
+            type: String, 
+            default: '' 
+        },
+        os: { 
+            type: String, 
+            default: '' 
+        },
+        timezone: { 
+            type: String, 
+            default: '' 
+        }
     },
     location: {
-        ipAddress: { type: String, default: '' },
-        country: { type: String, default: '' },
-        city: { type: String, default: '' }
+        ipAddress: { 
+            type: String, 
+            default: '' 
+        },
+        country: { 
+            type: String, 
+            default: '' 
+        },
+        city: { 
+            type: String, 
+            default: '' 
+        }
     },
     visitCount: {
         type: Number,
@@ -52,26 +76,12 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     }
+}, {
+    // This replaces the pre-save hook
+    timestamps: false // We handle timestamps manually
 });
 
-// FIX 1: Remove or fix the pre-save hook - OPTION A (remove it)
-// Simply remove these lines entirely:
-// userSchema.pre('save', function(next) {
-//     this.updatedAt = Date.now();
-//     next();
-// });
-
-// FIX 2: Or use async version - OPTION B (update it)
-userSchema.pre('save', async function(next) {
-    try {
-        this.updatedAt = Date.now();
-        next();
-    } catch (error) {
-        next(error);
-    }
-});
-
-// FIX 3: Or remove the hook entirely and handle it differently - OPTION C
-// Comment out the entire pre-save hook and let Mongoose handle timestamps
+// Don't use pre-save hooks that might fail
+// Instead, update updatedAt manually in your routes
 
 module.exports = mongoose.model('User', userSchema);

@@ -1,3 +1,4 @@
+// config/database.js - SIMPLIFIED
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
@@ -5,29 +6,25 @@ const connectDB = async () => {
         const mongoURI = process.env.MONGODB_URI;
         
         if (!mongoURI) {
-            console.error('❌ MONGODB_URI is not defined in .env file');
-            console.log('⚠️  Using in-memory database for development');
+            console.log('⚠️  MONGODB_URI not found, using memory storage');
             return;
         }
         
-        console.log('🔗 Connecting to MongoDB...');
+        console.log('🔗 Attempting MongoDB connection...');
         
-        await mongoose.connect(mongoURI);
+        await mongoose.connect(mongoURI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+            socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+        });
+        
         console.log('✅ MongoDB Connected Successfully');
-        
-        // Connection event listeners
-        mongoose.connection.on('error', (err) => {
-            console.error('❌ MongoDB connection error:', err);
-        });
-        
-        mongoose.connection.on('disconnected', () => {
-            console.log('⚠️  MongoDB disconnected');
-        });
         
     } catch (error) {
         console.error('❌ MongoDB Connection Error:', error.message);
-        console.log('⚠️  Server will continue without database connection');
-        // Don't exit process for development
+        console.log('⚠️  Using memory storage instead');
+        // Don't exit process, use memory storage
     }
 };
 
