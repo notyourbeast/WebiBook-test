@@ -851,47 +851,48 @@
         // ============================================================================
         // API CONFIGURATION - UPDATED FOR MONGODB
         // ============================================================================
-        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3000/api'
-            : 'https://webibook-test-3zoz.onrender.com/api'; // Make sure this is your ACTUAL Render URL
+        const API_BASE_URL = window.location.origin + '/api';
+console.log('🌐 Using API:', API_BASE_URL);
 
         async function callAPI(endpoint, method = 'GET', body = null, requiresAuth = false) {
-            try {
-                const token = localStorage.getItem('webiBookToken');
-                const options = {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                };
-
-                if (token && requiresAuth) {
-                    options.headers.Authorization = `Bearer ${token}`;
-                }
-
-                if (body) {
-                    options.body = JSON.stringify(body);
-                }
-
-                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-
-                if (response.status === 401) {
-                    localStorage.removeItem('webiBookToken');
-                    localStorage.removeItem('webiBookUser');
-                    updateLoginUI();
-                    throw new Error('Session expired. Please login again.');
-                }
-
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-
-                return await response.json();
-            } catch (error) {
-                console.error('API call failed:', error);
-                return null;
+    try {
+        const token = localStorage.getItem('webiBookToken');
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json'
             }
+        };
+
+        if (token && requiresAuth) {
+            options.headers.Authorization = `Bearer ${token}`;
         }
+
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        
+        if (response.status === 401) {
+            localStorage.removeItem('webiBookToken');
+            localStorage.removeItem('webiBookUser');
+            updateLoginUI();
+            throw new Error('Session expired. Please login again.');
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`API error ${response.status}:`, errorText);
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('API call failed:', error);
+        return null;
+    }
+}
 
         // ============================================================================
         // EVENTS DATA (Now fetched from MongoDB)
@@ -949,30 +950,28 @@
         // USER AUTHENTICATION - MONGODB BASED
         // ============================================================================
         async function registerOrLoginUser(email) {
-            console.log('🔄 Attempting to register:', email); // ADD THIS
-            console.log('🌐 API URL:', API_BASE_URL); // ADD THIS
-            try {
-                const response = await callAPI('/auth/register', 'POST', { email });
-                console.log('📊 API Response:', response); // ADD THIS
+    console.log('🔄 Attempting to register:', email);
+    console.log('🌐 API URL:', API_BASE_URL + '/auth/register');
+    
+    try {
+        const response = await callAPI('/auth/register', 'POST', { email });
+        console.log('📊 API Response:', response);
 
-                if (response && response.success) {
-                    console.log('✅ Registration successful!'); // ADD THIS
-                    localStorage.setItem('webiBookToken', response.token);
-                    localStorage.setItem('webiBookUser', JSON.stringify(response.user));
-                    updateLoginUI();
-                    await trackVisit(false);
-                    return response.user;
-                } else {
-                    console.error('❌ API returned failure:', response); // ADD THIS
-                }
-                return null;
-            } catch (error) {
-                console.error('❌ Authentication error:', error.message); // ADD THIS
-                console.error('❌ Full error:', error); // ADD THIS
-                console.error('Authentication error:', error);
-                return null;
-            }
+        if (response && response.success) {
+            console.log('✅ Registration successful!');
+            localStorage.setItem('webiBookToken', response.token);
+            localStorage.setItem('webiBookUser', JSON.stringify(response.user));
+            updateLoginUI();
+            return response.user;
+        } else {
+            console.error('❌ API returned failure:', response);
+            throw new Error(response?.error || 'Registration failed');
         }
+    } catch (error) {
+        console.error('❌ Authentication error:', error.message);
+        throw error;
+    }
+}
 
         function getCurrentUser() {
             const userStr = localStorage.getItem('webiBookUser');
@@ -1040,28 +1039,32 @@
         }
 
         async function saveEvent(eventId) {
-            const user = getCurrentUser();
-            const token = getAuthToken();
+    const user = getCurrentUser();
+    const token = getAuthToken();
 
-            if (!user || !token) {
-                showLoginSection();
-                return false;
-            }
+    if (!user || !token) {
+        showLoginSection();
+        return false;
+    }
 
-            try {
-                const response = await callAPI('/events/save', 'POST', { eventId }, true);
+    try {
+        const response = await callAPI('/events/save', 'POST', { eventId }, true);
 
-                if (response && response.success) {
-                    const updatedUser = { ...user, savedEvents: response.savedEvents };
-                    localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
-                    return true;
-                }
-                return false;
-            } catch (error) {
-                console.error('Save event error:', error);
-                return false;
-            }
+        if (response && response.success) {
+            // Update local user with saved events
+            const updatedUser = { ...user, savedEvents: response.savedEvents || [] };
+            localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
+            
+            // Show success message
+            alert('Event saved permanently!');
+            return true;
         }
+        return false;
+    } catch (error) {
+        console.error('Save event error:', error);
+        return false;
+    }
+}
 
         async function unsaveEvent(eventId) {
             const user = getCurrentUser();
@@ -1396,25 +1399,27 @@
         // FORM HANDLERS
         // ============================================================================
         document.getElementById('login-form').addEventListener('submit', async function (e) {
-            e.preventDefault();
+    e.preventDefault();
 
-            const email = document.getElementById('login-input').value.trim();
+    const email = document.getElementById('login-input').value.trim();
 
-            if (!email || !email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
-                return;
-            }
+    if (!email || !email.includes('@') || !email.includes('.')) {
+        alert('Please enter a valid email address');
+        return;
+    }
 
-            const user = await registerOrLoginUser(email);
+    try {
+        const user = await registerOrLoginUser(email);
 
-            if (user) {
-                document.getElementById('login-input').value = '';
-                renderEvents();
-                alert(`Welcome ${user.name}! You can now save events.`);
-            } else {
-                alert('Failed to sign up. Please try again.');
-            }
-        });
+        if (user) {
+            document.getElementById('login-input').value = '';
+            renderEvents();
+            alert(`Welcome ${user.name}! You can now save events.`);
+        }
+    } catch (error) {
+        alert('Failed to sign up. Please try again. Error: ' + error.message);
+    }
+});
 
 
         document.getElementById('logout-btn').addEventListener('click', function () {
@@ -1473,89 +1478,110 @@
         let retentionChart = null;
 
         function authenticateAdmin() {
-            const password = document.getElementById('admin-password-input').value;
-            const errorMsg = document.getElementById('admin-error');
+    const password = document.getElementById('admin-password-input').value;
+    const errorMsg = document.getElementById('admin-error');
 
-            if (password === window.ADMIN_PASSWORD) {
-                localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
-                document.getElementById('admin-login-overlay').classList.remove('active');
-                document.getElementById('admin-dashboard').classList.add('active');
-                setTimeout(() => {
-                    loadDashboardData();
-                }, 100);
-            } else {
-                errorMsg.style.display = 'block';
-                document.getElementById('admin-password-input').value = '';
-            }
-        }
+    if (password === window.ADMIN_PASSWORD) {
+        // Store admin auth in localStorage for persistence
+        localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+        
+        // Hide login, show dashboard
+        document.getElementById('admin-login-overlay').classList.remove('active');
+        document.getElementById('admin-dashboard').classList.add('active');
+        
+        // Load data
+        setTimeout(() => {
+            loadDashboardData();
+        }, 100);
+        
+        // Clear password field
+        document.getElementById('admin-password-input').value = '';
+    } else {
+        errorMsg.style.display = 'block';
+        document.getElementById('admin-password-input').value = '';
+    }
+}
 
         function closeAdminDashboard() {
-            document.getElementById('admin-dashboard').classList.remove('active');
-            localStorage.removeItem('webiBookAdminAuth');
-        }
+    document.getElementById('admin-dashboard').classList.remove('active');
+    // DON'T remove admin auth from localStorage - keep admin logged in
+    // localStorage.removeItem('webiBookAdminAuth');
+}
 
         function initAdminAccess() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlAdminParam = urlParams.get('admin');
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlAdminParam = urlParams.get('admin');
 
-            if (urlAdminParam !== null) {
-                if (urlAdminParam === window.ADMIN_PASSWORD) {
-                    localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
-                    document.getElementById('admin-dashboard').classList.add('active');
-                    setTimeout(() => {
-                        loadDashboardData();
-                    }, 200);
-                } else {
-                    document.getElementById('admin-login-overlay').classList.add('active');
-                }
-            }
+    // Check URL parameter first
+    if (urlAdminParam !== null) {
+        if (urlAdminParam === window.ADMIN_PASSWORD) {
+            localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+            document.getElementById('admin-dashboard').classList.add('active');
+            setTimeout(() => {
+                loadDashboardData();
+            }, 200);
+        } else {
+            document.getElementById('admin-login-overlay').classList.add('active');
         }
+    } 
+    // Then check localStorage
+    else if (localStorage.getItem('webiBookAdminAuth') === window.ADMIN_PASSWORD) {
+        document.getElementById('admin-dashboard').classList.add('active');
+        setTimeout(() => {
+            loadDashboardData();
+        }, 200);
+    }
+}
 
         async function loadDashboardData() {
-            document.getElementById('metric-emails').textContent = '...';
-            document.getElementById('metric-users').textContent = '...';
-            document.getElementById('metric-saved').textContent = '...';
-            document.getElementById('metric-returns').textContent = '...';
-            document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
-            document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+    document.getElementById('metric-emails').textContent = '...';
+    document.getElementById('metric-users').textContent = '...';
+    document.getElementById('metric-saved').textContent = '...';
+    document.getElementById('metric-returns').textContent = '...';
+    document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+    document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+    document.getElementById('event-clicks-table-body').innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
 
-            try {
-                const adminPassword = window.ADMIN_PASSWORD;
-                const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
+    try {
+        const adminPassword = window.ADMIN_PASSWORD;
+        const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
 
-                if (response && response.success) {
-                    const data = response.dashboard;
+        if (response && response.success) {
+            const data = response.dashboard;
 
-                    document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
-                    document.getElementById('metric-users').textContent = data.metrics.totalUsers;
-                    document.getElementById('metric-saved').textContent = await calculateTotalSavedEvents(data.users);
-                    document.getElementById('metric-returns').textContent = data.metrics.returnRate;
-                    document.getElementById('metric-returns-detail').textContent =
-                        `${data.metrics.activeUsers} active / ${data.metrics.totalUsers} total`;
+            // Update metrics
+            document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
+            document.getElementById('metric-users').textContent = data.metrics.totalUsers;
+            document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents;
+            document.getElementById('metric-returns').textContent = data.metrics.returnRate;
+            document.getElementById('metric-returns-detail').textContent = 
+                `${data.metrics.activeUsers} active / ${data.metrics.totalUsers} total`;
 
-                    populateEmailsTable(data.emailSubscriptions);
-                    populateUsersTable(data.users);
-                    populateEventClicksTable(data.eventClicks);
+            // Populate tables
+            populateEmailsTable(data.emailSubscriptions);
+            populateUsersTable(data.users);
+            populateEventClicksTable(data.eventClicks);
 
-                    createEngagementChart(
-                        data.metrics.emailSubscriptions,
-                        data.metrics.totalUsers,
-                        await calculateTotalSavedEvents(data.users)
-                    );
+            // Create charts
+            createEngagementChart(
+                data.metrics.emailSubscriptions,
+                data.metrics.totalUsers,
+                data.metrics.totalSavedEvents
+            );
 
-                    createVisitsChart(
-                        data.metrics.totalVisits - data.metrics.uniqueVisitors,
-                        data.metrics.uniqueVisitors
-                    );
+            createVisitsChart(
+                data.metrics.totalVisits - data.metrics.uniqueVisitors,
+                data.metrics.uniqueVisitors
+            );
 
-                    if (data.dailyStats && data.dailyStats.length > 0) {
-                        createRetentionChart(data.dailyStats);
-                    }
-                }
-            } catch (error) {
-                console.error('Dashboard error:', error);
-            }
+            // Show success message
+            console.log('✅ Dashboard loaded successfully');
         }
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        alert('Failed to load dashboard: ' + error.message);
+    }
+}
 
         async function calculateTotalSavedEvents(users) {
             if (!users) return 0;

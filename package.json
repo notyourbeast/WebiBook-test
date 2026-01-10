@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "local": "nodemon server.js"
+    "local": "nodemon server.js",
+    "kill-port": "lsof -ti:3000 | xargs kill -9 2>/dev/null || echo 'No process on port 3000'"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",
