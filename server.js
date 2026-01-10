@@ -21,15 +21,15 @@ const path = require('path');
 const geoip = require('geoip-lite');
 
 // Database and Models - FIXED PATHS
-const connectDB = require('./database');  // Remove config/ since database.js is in same dir
-const User = require('./User');           // Remove models/ prefix
-const Event = require('./Event');
-const EmailSubscription = require('./EventSubscription');
-const Visit = require('./Visit');
-const EventClick = require('./EventClick');
+const connectDB = require('./src/database');
+const User = require('./src/User');
+const Event = require('./src/Event');
+const EmailSubscription = require('./src/EventSubscription');
+const Visit = require('./src/Visit');
+const EventClick = require('./src/EventClick');
+const auth = require('./src/auth');
 
-// Middleware
-const auth = require('./middleware/auth');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -853,7 +853,8 @@ app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, 'index.html'));
+    // If index.html is in the root (not in src), use:
+    res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
 // ============================================================================
