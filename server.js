@@ -123,13 +123,16 @@ app.get('/api/health', (req, res) => {
 // Register/Login User - Email only
 app.post('/api/auth/register', async (req, res) => {
     try {
+        console.log('📨 REGISTER REQUEST RECEIVED:', req.body); // ADD THIS
         const { email } = req.body;
         
         if (!email || !email.includes('@')) {
+            console.log('❌ Invalid email format:', email); // ADD THIS
             return res.status(400).json({ error: 'Valid email is required' });
         }
         
         const cleanEmail = email.toLowerCase().trim();
+        console.log('🔍 Looking for user with email:', cleanEmail); // ADD THIS
         
         // Check if user exists
         let user = await User.findOne({ email: cleanEmail });
@@ -195,6 +198,7 @@ app.post('/api/auth/register', async (req, res) => {
         
     } catch (error) {
         console.error('Registration error:', error);
+        console.error('❌ Full error details:', error.stack); // ADD THIS
         res.status(500).json({ 
             success: false,
             error: 'Registration failed. Please try again.',

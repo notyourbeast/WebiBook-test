@@ -853,7 +853,7 @@
         // ============================================================================
         const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
-            : 'https://webibook-test-3zoz.onrender.com/api'; // Replace with your Render URL
+            : 'https://webibook-test-3zoz.onrender.com/api'; // Make sure this is your ACTUAL Render URL
 
         async function callAPI(endpoint, method = 'GET', body = null, requiresAuth = false) {
             try {
@@ -949,18 +949,26 @@
         // USER AUTHENTICATION - MONGODB BASED
         // ============================================================================
         async function registerOrLoginUser(email) {
+            console.log('🔄 Attempting to register:', email); // ADD THIS
+            console.log('🌐 API URL:', API_BASE_URL); // ADD THIS
             try {
                 const response = await callAPI('/auth/register', 'POST', { email });
+                console.log('📊 API Response:', response); // ADD THIS
 
                 if (response && response.success) {
+                    console.log('✅ Registration successful!'); // ADD THIS
                     localStorage.setItem('webiBookToken', response.token);
                     localStorage.setItem('webiBookUser', JSON.stringify(response.user));
                     updateLoginUI();
                     await trackVisit(false);
                     return response.user;
+                } else {
+                    console.error('❌ API returned failure:', response); // ADD THIS
                 }
                 return null;
             } catch (error) {
+                console.error('❌ Authentication error:', error.message); // ADD THIS
+                console.error('❌ Full error:', error); // ADD THIS
                 console.error('Authentication error:', error);
                 return null;
             }
