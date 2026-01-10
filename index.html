@@ -948,13 +948,9 @@
         // ============================================================================
         // USER AUTHENTICATION - MONGODB BASED
         // ============================================================================
-        async function registerOrLoginUser(email, password = null, name = '') {
+        async function registerOrLoginUser(email) {
             try {
-                const response = await callAPI('/auth/register', 'POST', {
-                    email,
-                    password,
-                    name
-                });
+                const response = await callAPI('/auth/register', 'POST', { email });
 
                 if (response && response.success) {
                     localStorage.setItem('webiBookToken', response.token);
@@ -1395,23 +1391,23 @@
             e.preventDefault();
 
             const email = document.getElementById('login-input').value.trim();
-            const name = email.split('@')[0];
 
             if (!email || !email.includes('@') || !email.includes('.')) {
                 alert('Please enter a valid email address');
                 return;
             }
 
-            const user = await registerOrLoginUser(email, '', name);
+            const user = await registerOrLoginUser(email);
 
             if (user) {
                 document.getElementById('login-input').value = '';
                 renderEvents();
-                alert(`Welcome ${name}! You can now save events.`);
+                alert(`Welcome ${user.name}! You can now save events.`);
             } else {
-                alert('Failed to login. Please try again.');
+                alert('Failed to sign up. Please try again.');
             }
         });
+
 
         document.getElementById('logout-btn').addEventListener('click', function () {
             clearCurrentUser();
@@ -1429,22 +1425,28 @@
                 return;
             }
 
-            const success = await subscribeToEmails(email);
+            // First, try to sign up the user
+            const user = await registerOrLoginUser(email);
 
-            if (success) {
-                document.getElementById('email-input').value = '';
-                alert('Thanks! You\'ll receive weekly event reminders every Monday.');
+            if (user) {
+                // Then subscribe to weekly emails
+                const success = await subscribeToEmails(email);
 
-                const visitInfo = await getVisitInfo();
-                if (typeof gtag !== 'undefined' && visitInfo) {
-                    gtag('event', 'weekly_reminder_signup', {
-                        'email': email,
-                        'is_returning_visitor': visitInfo.isReturning,
-                        'visit_count': visitInfo.visitCount
-                    });
+                if (success) {
+                    document.getElementById('email-input').value = '';
+                    alert('Thanks! You\'ll receive weekly event reminders every Monday.');
+
+                    // Track in Google Analytics if available
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'weekly_reminder_signup', {
+                            'email': email
+                        });
+                    }
+                } else {
+                    alert('Signed in but failed to subscribe to emails. Please try again.');
                 }
             } else {
-                alert('Failed to subscribe. Please try again.');
+                alert('Failed to sign up. Please try again.');
             }
         });
 

@@ -17,17 +17,15 @@ const userSchema = new mongoose.Schema({
         savedAt: { type: Date, default: Date.now }
     }],
     deviceInfo: {
-        userAgent: String,
-        deviceType: String,
-        browser: String,
-        os: String,
-        screenResolution: String,
-        timezone: String
+        userAgent: { type: String, default: '' },
+        browser: { type: String, default: '' },
+        os: { type: String, default: '' },
+        timezone: { type: String, default: '' }
     },
     location: {
-        country: String,
-        city: String,
-        ipAddress: String
+        ipAddress: { type: String, default: '' },
+        country: { type: String, default: '' },
+        city: { type: String, default: '' }
     },
     visitCount: {
         type: Number,

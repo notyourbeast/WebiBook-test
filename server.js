@@ -123,51 +123,52 @@ app.get('/api/health', (req, res) => {
 // Register/Login User - Email only
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const { email, name } = req.body;
+        const { email } = req.body;
         
         if (!email || !email.includes('@')) {
             return res.status(400).json({ error: 'Valid email is required' });
         }
         
+        const cleanEmail = email.toLowerCase().trim();
+        
         // Check if user exists
-        let user = await User.findOne({ email: email.toLowerCase() });
+        let user = await User.findOne({ email: cleanEmail });
         
         if (user) {
-            // User exists, update last login
+            // User exists - just update last visit
             user.lastVisit = new Date();
             user.visitCount += 1;
             await user.save();
             
+            // Generate token
             const token = auth.generateToken(user._id);
             
             return res.json({
                 success: true,
-                message: 'Login successful',
+                message: 'Welcome back!',
                 user: {
                     id: user._id,
                     email: user.email,
-                    name: user.name,
-                    savedEvents: user.savedEvents,
+                    name: user.name || user.email.split('@')[0],
+                    savedEvents: user.savedEvents || [],
                     visitCount: user.visitCount
                 },
                 token
             });
         }
         
-        // Create new user (email-only, no password)
+        // Create new user (NO PASSWORD)
         user = new User({
-            email: email.toLowerCase(),
-            name: name || email.split('@')[0],
+            email: cleanEmail,
+            name: cleanEmail.split('@')[0],
             deviceInfo: {
-                userAgent: req.clientInfo.userAgent,
+                userAgent: req.clientInfo.userAgent || '',
                 browser: req.clientInfo.userAgent?.match(/(chrome|firefox|safari|edge)/i)?.[0] || 'unknown',
-                os: req.clientInfo.userAgent?.match(/(windows|mac os|linux|android|ios)/i)?.[0] || 'unknown',
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             },
             location: {
-                ipAddress: req.clientInfo.ip,
-                country: req.clientInfo.geo?.country,
-                city: req.clientInfo.geo?.city
+                ipAddress: req.clientInfo.ip || 'unknown',
+                country: req.clientInfo.geo?.country || 'unknown'
             },
             firstVisit: new Date(),
             lastVisit: new Date(),
@@ -176,24 +177,27 @@ app.post('/api/auth/register', async (req, res) => {
         
         await user.save();
         
+        // Generate token
         const token = auth.generateToken(user._id);
         
         res.status(201).json({
             success: true,
-            message: 'Registration successful',
+            message: 'Registration successful!',
             user: {
                 id: user._id,
                 email: user.email,
                 name: user.name,
-                savedEvents: user.savedEvents,
-                visitCount: user.visitCount
+                savedEvents: [],
+                visitCount: 1
             },
             token
         });
+        
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ 
-            error: 'Registration failed',
+            success: false,
+            error: 'Registration failed. Please try again.',
             details: error.message 
         });
     }
@@ -202,19 +206,32 @@ app.post('/api/auth/register', async (req, res) => {
 // Get user profile
 app.get('/api/auth/profile', auth.verifyToken, async (req, res) => {
     try {
+        // Get user with latest data
+        const user = await User.findById(req.user._id);
+        
+        if (!user) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'User not found' 
+            });
+        }
+        
         res.json({
             success: true,
             user: {
-                id: req.user._id,
-                email: req.user.email,
-                name: req.user.name,
-                savedEvents: req.user.savedEvents,
-                visitCount: req.user.visitCount
+                id: user._id,
+                email: user.email,
+                name: user.name || user.email.split('@')[0],
+                savedEvents: user.savedEvents || [],
+                visitCount: user.visitCount || 0
             }
         });
     } catch (error) {
         console.error('Profile error:', error);
-        res.status(500).json({ error: 'Failed to get profile' });
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to get profile' 
+        });
     }
 });
 
@@ -369,39 +386,66 @@ app.post('/api/emails/subscribe', async (req, res) => {
         const { email } = req.body;
         
         if (!email || !email.includes('@')) {
-            return res.status(400).json({ error: 'Valid email is required' });
+            return res.status(400).json({ 
+                success: false,
+                error: 'Valid email is required' 
+            });
         }
         
-        // Check if already subscribed
-        let subscription = await EmailSubscription.findOne({ 
-            email: email.toLowerCase() 
-        });
+        const cleanEmail = email.toLowerCase().trim();
         
-        if (subscription) {
-            // Reactivate if unsubscribed
-            if (!subscription.isActive) {
-                subscription.isActive = true;
-                subscription.unsubscribedAt = null;
-                await subscription.save();
-            }
-        } else {
-            // Create new subscription
-            subscription = new EmailSubscription({
-                email: email.toLowerCase(),
-                source: 'weekly_reminder',
-                subscribedAt: new Date()
+        // First, ensure user exists (create if not)
+        let user = await User.findOne({ email: cleanEmail });
+        
+        if (!user) {
+            user = new User({
+                email: cleanEmail,
+                name: cleanEmail.split('@')[0],
+                deviceInfo: {
+                    userAgent: req.clientInfo.userAgent || '',
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                },
+                location: {
+                    ipAddress: req.clientInfo.ip || 'unknown'
+                },
+                firstVisit: new Date(),
+                lastVisit: new Date(),
+                visitCount: 1
             });
+            await user.save();
+        }
+        
+        // Subscribe to weekly emails
+        let subscription = await EmailSubscription.findOne({ email: cleanEmail });
+        
+        if (!subscription) {
+            subscription = new EmailSubscription({
+                email: cleanEmail,
+                source: 'weekly_reminder',
+                subscribedAt: new Date(),
+                isActive: true,
+                userId: user._id
+            });
+            await subscription.save();
+        } else if (!subscription.isActive) {
+            subscription.isActive = true;
+            subscription.unsubscribedAt = null;
             await subscription.save();
         }
         
-        res.json({ 
-            success: true, 
-            message: 'Subscribed to weekly emails',
-            email: subscription.email
+        res.json({
+            success: true,
+            message: 'Subscribed to weekly emails!',
+            email: cleanEmail,
+            alreadySubscribed: !!subscription
         });
+        
     } catch (error) {
         console.error('Email subscription error:', error);
-        res.status(500).json({ error: 'Failed to subscribe' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to subscribe. Please try again.'
+        });
     }
 });
 
