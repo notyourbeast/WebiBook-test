@@ -682,18 +682,37 @@
     <!-- Admin Dashboard (Password Protected - Only visible to authorized users) -->
     <!-- TODO: Change ADMIN_PASSWORD to your secure password -->
     <script>
-        // Admin password - CHANGE THIS to your secure password
-        // Using window object to make it globally accessible
         window.ADMIN_PASSWORD = 'webiBook2024'; // Change this!
 
-        // Check if user is admin (via URL parameter or localStorage)
-        // NOTE: This only checks - doesn't auto-authenticate
+        // Check if user is admin
         function checkAdminAccess() {
             const urlParams = new URLSearchParams(window.location.search);
             const urlPassword = urlParams.get('admin');
             const storedAuth = localStorage.getItem('webiBookAdminAuth');
+            const sessionAuth = sessionStorage.getItem('webiBookAdminSession');
 
-            return urlPassword === window.ADMIN_PASSWORD || storedAuth === window.ADMIN_PASSWORD;
+            return urlPassword === window.ADMIN_PASSWORD ||
+                storedAuth === window.ADMIN_PASSWORD ||
+                sessionAuth === window.ADMIN_PASSWORD;
+        }
+
+        function handleAdminParameter() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlPassword = urlParams.get('admin');
+
+            if (urlPassword === window.ADMIN_PASSWORD) {
+                // Store in localStorage for persistence
+                localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+                // Store in sessionStorage for current session
+                sessionStorage.setItem('webiBookAdminSession', window.ADMIN_PASSWORD);
+
+                // Remove the password from URL for security
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+
+                // Show dashboard
+                showAdminDashboard();
+            }
         }
 
         // DO NOT auto-authenticate here - only initAdminAccess() handles authentication
@@ -817,6 +836,31 @@
                 </div>
             </div>
 
+                        <!-- Visit Statistics Table -->
+            <div class="dashboard-section">
+                <h3>Visit Statistics</h3>
+                <div class="chart-container">
+                    <canvas id="visits-chart"></canvas>
+                </div>
+                <div style="margin-top: 20px; overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Browser</th>
+                                <th>Country</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visits-table-body">
+                            <tr>
+                                <td colspan="4">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Visit Statistics -->
             <div class="dashboard-section">
                 <h3>Visit Statistics</h3>
@@ -852,47 +896,47 @@
         // API CONFIGURATION - UPDATED FOR MONGODB
         // ============================================================================
         const API_BASE_URL = window.location.origin + '/api';
-console.log('🌐 Using API:', API_BASE_URL);
+        console.log('🌐 Using API:', API_BASE_URL);
 
         async function callAPI(endpoint, method = 'GET', body = null, requiresAuth = false) {
-    try {
-        const token = localStorage.getItem('webiBookToken');
-        const options = {
-            method,
-            headers: {
-                'Content-Type': 'application/json'
+            try {
+                const token = localStorage.getItem('webiBookToken');
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+
+                if (token && requiresAuth) {
+                    options.headers.Authorization = `Bearer ${token}`;
+                }
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+
+                if (response.status === 401) {
+                    localStorage.removeItem('webiBookToken');
+                    localStorage.removeItem('webiBookUser');
+                    updateLoginUI();
+                    throw new Error('Session expired. Please login again.');
+                }
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`API error ${response.status}:`, errorText);
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                return null;
             }
-        };
-
-        if (token && requiresAuth) {
-            options.headers.Authorization = `Bearer ${token}`;
         }
-
-        if (body) {
-            options.body = JSON.stringify(body);
-        }
-
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-        
-        if (response.status === 401) {
-            localStorage.removeItem('webiBookToken');
-            localStorage.removeItem('webiBookUser');
-            updateLoginUI();
-            throw new Error('Session expired. Please login again.');
-        }
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`API error ${response.status}:`, errorText);
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('API call failed:', error);
-        return null;
-    }
-}
 
         // ============================================================================
         // EVENTS DATA (Now fetched from MongoDB)
@@ -950,28 +994,28 @@ console.log('🌐 Using API:', API_BASE_URL);
         // USER AUTHENTICATION - MONGODB BASED
         // ============================================================================
         async function registerOrLoginUser(email) {
-    console.log('🔄 Attempting to register:', email);
-    console.log('🌐 API URL:', API_BASE_URL + '/auth/register');
-    
-    try {
-        const response = await callAPI('/auth/register', 'POST', { email });
-        console.log('📊 API Response:', response);
+            console.log('🔄 Attempting to register:', email);
+            console.log('🌐 API URL:', API_BASE_URL + '/auth/register');
 
-        if (response && response.success) {
-            console.log('✅ Registration successful!');
-            localStorage.setItem('webiBookToken', response.token);
-            localStorage.setItem('webiBookUser', JSON.stringify(response.user));
-            updateLoginUI();
-            return response.user;
-        } else {
-            console.error('❌ API returned failure:', response);
-            throw new Error(response?.error || 'Registration failed');
+            try {
+                const response = await callAPI('/auth/register', 'POST', { email });
+                console.log('📊 API Response:', response);
+
+                if (response && response.success) {
+                    console.log('✅ Registration successful!');
+                    localStorage.setItem('webiBookToken', response.token);
+                    localStorage.setItem('webiBookUser', JSON.stringify(response.user));
+                    updateLoginUI();
+                    return response.user;
+                } else {
+                    console.error('❌ API returned failure:', response);
+                    throw new Error(response?.error || 'Registration failed');
+                }
+            } catch (error) {
+                console.error('❌ Authentication error:', error.message);
+                throw error;
+            }
         }
-    } catch (error) {
-        console.error('❌ Authentication error:', error.message);
-        throw error;
-    }
-}
 
         function getCurrentUser() {
             const userStr = localStorage.getItem('webiBookUser');
@@ -1039,32 +1083,32 @@ console.log('🌐 Using API:', API_BASE_URL);
         }
 
         async function saveEvent(eventId) {
-    const user = getCurrentUser();
-    const token = getAuthToken();
+            const user = getCurrentUser();
+            const token = getAuthToken();
 
-    if (!user || !token) {
-        showLoginSection();
-        return false;
-    }
+            if (!user || !token) {
+                showLoginSection();
+                return false;
+            }
 
-    try {
-        const response = await callAPI('/events/save', 'POST', { eventId }, true);
+            try {
+                const response = await callAPI('/events/save', 'POST', { eventId }, true);
 
-        if (response && response.success) {
-            // Update local user with saved events
-            const updatedUser = { ...user, savedEvents: response.savedEvents || [] };
-            localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
-            
-            // Show success message
-            alert('Event saved permanently!');
-            return true;
+                if (response && response.success) {
+                    // Update local user with saved events
+                    const updatedUser = { ...user, savedEvents: response.savedEvents || [] };
+                    localStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
+
+                    // Show success message
+                    alert('Event saved permanently!');
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Save event error:', error);
+                return false;
+            }
         }
-        return false;
-    } catch (error) {
-        console.error('Save event error:', error);
-        return false;
-    }
-}
 
         async function unsaveEvent(eventId) {
             const user = getCurrentUser();
@@ -1399,27 +1443,27 @@ console.log('🌐 Using API:', API_BASE_URL);
         // FORM HANDLERS
         // ============================================================================
         document.getElementById('login-form').addEventListener('submit', async function (e) {
-    e.preventDefault();
+            e.preventDefault();
 
-    const email = document.getElementById('login-input').value.trim();
+            const email = document.getElementById('login-input').value.trim();
 
-    if (!email || !email.includes('@') || !email.includes('.')) {
-        alert('Please enter a valid email address');
-        return;
-    }
+            if (!email || !email.includes('@') || !email.includes('.')) {
+                alert('Please enter a valid email address');
+                return;
+            }
 
-    try {
-        const user = await registerOrLoginUser(email);
+            try {
+                const user = await registerOrLoginUser(email);
 
-        if (user) {
-            document.getElementById('login-input').value = '';
-            renderEvents();
-            alert(`Welcome ${user.name}! You can now save events.`);
-        }
-    } catch (error) {
-        alert('Failed to sign up. Please try again. Error: ' + error.message);
-    }
-});
+                if (user) {
+                    document.getElementById('login-input').value = '';
+                    renderEvents();
+                    alert(`Welcome ${user.name}! You can now save events.`);
+                }
+            } catch (error) {
+                alert('Failed to sign up. Please try again. Error: ' + error.message);
+            }
+        });
 
 
         document.getElementById('logout-btn').addEventListener('click', function () {
@@ -1473,119 +1517,167 @@ console.log('🌐 Using API:', API_BASE_URL);
         // ============================================================================
         // ADMIN DASHBOARD - MONGODB BASED
         // ============================================================================
+                // ============================================================================
+        // ADMIN DASHBOARD - UPDATED WITH PERSISTENT LOGIN
+        // ============================================================================
         let engagementChart = null;
         let visitsChart = null;
-        let retentionChart = null;
 
         function authenticateAdmin() {
-    const password = document.getElementById('admin-password-input').value;
-    const errorMsg = document.getElementById('admin-error');
+            const password = document.getElementById('admin-password-input').value;
+            const errorMsg = document.getElementById('admin-error');
 
-    if (password === window.ADMIN_PASSWORD) {
-        // Store admin auth in localStorage for persistence
-        localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
-        
-        // Hide login, show dashboard
-        document.getElementById('admin-login-overlay').classList.remove('active');
-        document.getElementById('admin-dashboard').classList.add('active');
-        
-        // Load data
-        setTimeout(() => {
-            loadDashboardData();
-        }, 100);
-        
-        // Clear password field
-        document.getElementById('admin-password-input').value = '';
-    } else {
-        errorMsg.style.display = 'block';
-        document.getElementById('admin-password-input').value = '';
-    }
-}
+            if (password === window.ADMIN_PASSWORD) {
+                // Store in both localStorage and sessionStorage
+                localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+                sessionStorage.setItem('webiBookAdminSession', window.ADMIN_PASSWORD);
+                
+                // Hide login, show dashboard
+                document.getElementById('admin-login-overlay').classList.remove('active');
+                document.getElementById('admin-dashboard').classList.add('active');
+                
+                // Load data
+                setTimeout(() => {
+                    loadDashboardData();
+                }, 100);
+                
+                // Clear password field
+                document.getElementById('admin-password-input').value = '';
+                errorMsg.style.display = 'none';
+            } else {
+                errorMsg.style.display = 'block';
+                document.getElementById('admin-password-input').value = '';
+            }
+        }
 
-        function closeAdminDashboard() {
-    document.getElementById('admin-dashboard').classList.remove('active');
-    // DON'T remove admin auth from localStorage - keep admin logged in
-    // localStorage.removeItem('webiBookAdminAuth');
-}
-
-        function initAdminAccess() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlAdminParam = urlParams.get('admin');
-
-    // Check URL parameter first
-    if (urlAdminParam !== null) {
-        if (urlAdminParam === window.ADMIN_PASSWORD) {
-            localStorage.setItem('webiBookAdminAuth', window.ADMIN_PASSWORD);
+        function showAdminDashboard() {
+            document.getElementById('admin-login-overlay').classList.remove('active');
             document.getElementById('admin-dashboard').classList.add('active');
             setTimeout(() => {
                 loadDashboardData();
-            }, 200);
-        } else {
-            document.getElementById('admin-login-overlay').classList.add('active');
+            }, 100);
         }
-    } 
-    // Then check localStorage
-    else if (localStorage.getItem('webiBookAdminAuth') === window.ADMIN_PASSWORD) {
-        document.getElementById('admin-dashboard').classList.add('active');
-        setTimeout(() => {
-            loadDashboardData();
-        }, 200);
-    }
-}
+
+        function closeAdminDashboard() {
+            document.getElementById('admin-dashboard').classList.remove('active');
+            // Don't remove from localStorage to keep admin logged in
+            // Only remove from sessionStorage
+            sessionStorage.removeItem('webiBookAdminSession');
+        }
+
+        function initAdminAccess() {
+            // Check if already authenticated
+            const isAdmin = checkAdminAccess();
+            
+            if (isAdmin) {
+                showAdminDashboard();
+            } else {
+                // Check for URL parameter
+                handleAdminParameter();
+            }
+        }
 
         async function loadDashboardData() {
-    document.getElementById('metric-emails').textContent = '...';
-    document.getElementById('metric-users').textContent = '...';
-    document.getElementById('metric-saved').textContent = '...';
-    document.getElementById('metric-returns').textContent = '...';
-    document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
-    document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
-    document.getElementById('event-clicks-table-body').innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+            // Clear previous data
+            document.getElementById('metric-emails').textContent = '...';
+            document.getElementById('metric-users').textContent = '...';
+            document.getElementById('metric-saved').textContent = '...';
+            document.getElementById('metric-returns').textContent = '...';
+            document.getElementById('emails-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+            document.getElementById('saved-events-table-body').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+            document.getElementById('event-clicks-table-body').innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
 
-    try {
-        const adminPassword = window.ADMIN_PASSWORD;
-        const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
+            try {
+                const adminPassword = window.ADMIN_PASSWORD;
+                const response = await callAPI(`/admin/dashboard?password=${adminPassword}`);
 
-        if (response && response.success) {
-            const data = response.dashboard;
+                if (response && response.success) {
+                    const data = response.dashboard;
+                    
+                    // Update metrics
+                    document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
+                    document.getElementById('metric-users').textContent = data.metrics.totalUsers;
+                    document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents;
+                    document.getElementById('metric-returns').textContent = data.metrics.returnRate;
+                    document.getElementById('metric-returns-detail').textContent = 
+                        `${data.metrics.activeUsers} active / ${data.metrics.totalUsers} total`;
 
-            // Update metrics
-            document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
-            document.getElementById('metric-users').textContent = data.metrics.totalUsers;
-            document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents;
-            document.getElementById('metric-returns').textContent = data.metrics.returnRate;
-            document.getElementById('metric-returns-detail').textContent = 
-                `${data.metrics.activeUsers} active / ${data.metrics.totalUsers} total`;
+                    // Populate tables
+                    populateEmailsTable(data.emailSubscriptions);
+                    populateUsersTable(data.users);
+                    populateEventClicksTable(data.eventClicks);
+                    populateVisitsTable(data.visits); // Add this line
 
-            // Populate tables
-            populateEmailsTable(data.emailSubscriptions);
-            populateUsersTable(data.users);
-            populateEventClicksTable(data.eventClicks);
+                    // Create charts
+                    createEngagementChart(
+                        data.metrics.emailSubscriptions,
+                        data.metrics.totalUsers,
+                        data.metrics.totalSavedEvents
+                    );
 
-            // Create charts
-            createEngagementChart(
-                data.metrics.emailSubscriptions,
-                data.metrics.totalUsers,
-                data.metrics.totalSavedEvents
-            );
+                    createVisitsChart(
+                        data.metrics.totalVisits - data.metrics.uniqueVisitors,
+                        data.metrics.uniqueVisitors
+                    );
 
-            createVisitsChart(
-                data.metrics.totalVisits - data.metrics.uniqueVisitors,
-                data.metrics.uniqueVisitors
-            );
-
-            // Show success message
-            console.log('✅ Dashboard loaded successfully');
+                    console.log('✅ Dashboard loaded successfully');
+                } else {
+                    console.error('❌ Dashboard response error:', response);
+                }
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                alert('Failed to load dashboard: ' + error.message);
+            }
         }
-    } catch (error) {
-        console.error('Dashboard error:', error);
-        alert('Failed to load dashboard: ' + error.message);
-    }
-}
 
-        async function calculateTotalSavedEvents(users) {
-            if (!users) return 0;
-            return users.reduce((total, user) => total + (user.savedEvents?.length || 0), 0);
+        // NEW FUNCTION: Populate visits table
+        function populateVisitsTable(visits) {
+            const tableBody = document.getElementById('visits-table-body');
+            
+            if (!tableBody) {
+                // Create the table if it doesn't exist
+                const visitsSection = document.querySelector('.dashboard-section:has(#visits-chart)');
+                if (visitsSection) {
+                    visitsSection.innerHTML += `
+                        <h3>Recent Visits</h3>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Browser</th>
+                                        <th>Country</th>
+                                        <th>Type</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="visits-table-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            if (visits && visits.length > 0) {
+                tableBody.innerHTML = visits.map(visit => {
+                    const time = new Date(visit.visitedAt).toLocaleString();
+                    const browser = visit.deviceInfo?.browser || 'Unknown';
+                    const country = visit.location?.country || 'Unknown';
+                    const type = visit.isReturning ? 'Returning' : 'First-time';
+                    
+                    return `
+                        <tr>
+                            <td>${time}</td>
+                            <td>${browser}</td>
+                            <td>${country}</td>
+                            <td>${type}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="4">No visits tracked yet</td></tr>';
+            }
         }
 
         function populateEmailsTable(emails) {
@@ -1593,12 +1685,12 @@ console.log('🌐 Using API:', API_BASE_URL);
 
             if (emails && emails.length > 0) {
                 tableBody.innerHTML = emails.map((email, index) => `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td>${email.email}</td>
-                    <td>${new Date(email.subscribedAt).toLocaleDateString()}</td>
-                </tr>
-            `).join('');
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${email.email}</td>
+                        <td>${new Date(email.subscribedAt).toLocaleDateString()}</td>
+                    </tr>
+                `).join('');
             } else {
                 tableBody.innerHTML = '<tr><td colspan="3">No emails collected yet</td></tr>';
             }
@@ -1610,13 +1702,18 @@ console.log('🌐 Using API:', API_BASE_URL);
             if (users && users.length > 0) {
                 tableBody.innerHTML = users.map(user => {
                     const savedEvents = user.savedEvents || [];
+                    const eventCount = Array.isArray(savedEvents) ? savedEvents.length : 0;
+                    const eventIds = Array.isArray(savedEvents) 
+                        ? savedEvents.map(e => e.eventId || e).join(', ') 
+                        : 'None';
+                    
                     return `
-                    <tr>
-                        <td>${user.email}</td>
-                        <td>${savedEvents.length}</td>
-                        <td>${savedEvents.map(e => e.eventId).join(', ') || 'None'}</td>
-                    </tr>
-                `;
+                        <tr>
+                            <td>${user.email || 'Unknown'}</td>
+                            <td>${eventCount}</td>
+                            <td>${eventIds}</td>
+                        </tr>
+                    `;
                 }).join('');
             } else {
                 tableBody.innerHTML = '<tr><td colspan="3">No users yet</td></tr>';
@@ -1630,14 +1727,14 @@ console.log('🌐 Using API:', API_BASE_URL);
                 tableBody.innerHTML = eventClicks.map(click => {
                     const lastClicked = click.lastClicked ? new Date(click.lastClicked).toLocaleString() : 'Never';
                     return `
-                    <tr>
-                        <td>${click._id || click.id}</td>
-                        <td>${click.title || 'Event'}</td>
-                        <td>${click.topic || 'N/A'}</td>
-                        <td><strong>${click.count || 0}</strong></td>
-                        <td>${lastClicked}</td>
-                    </tr>
-                `;
+                        <tr>
+                            <td>${click._id || click.eventId || 'N/A'}</td>
+                            <td>${click.title || 'Event'}</td>
+                            <td>${click.topic || 'N/A'}</td>
+                            <td><strong>${click.count || 0}</strong></td>
+                            <td>${lastClicked}</td>
+                        </tr>
+                    `;
                 }).join('');
             } else {
                 tableBody.innerHTML = '<tr><td colspan="5">No event clicks tracked yet</td></tr>';
@@ -1758,70 +1855,6 @@ console.log('🌐 Using API:', API_BASE_URL);
             });
         }
 
-        function createRetentionChart(dailyStats) {
-            if (typeof Chart === 'undefined') return;
-
-            let retentionChartCanvas = document.getElementById('retention-chart');
-            if (!retentionChartCanvas) {
-                const visitsSection = document.querySelector('.dashboard-section:has(#visits-chart)');
-                if (visitsSection) {
-                    visitsSection.innerHTML += `
-                    <h3>Daily Activity (Last 30 Days)</h3>
-                    <div class="chart-container">
-                        <canvas id="retention-chart"></canvas>
-                    </div>
-                `;
-                    retentionChartCanvas = document.getElementById('retention-chart');
-                }
-            }
-
-            if (!retentionChartCanvas) return;
-
-            if (retentionChart) {
-                retentionChart.destroy();
-            }
-
-            const labels = dailyStats.map(stat => stat._id);
-            const visitsData = dailyStats.map(stat => stat.visits);
-            const newUsersData = dailyStats.map(stat => stat.newUsers || 0);
-
-            retentionChart = new Chart(retentionChartCanvas, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Total Visits',
-                            data: visitsData,
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                            tension: 0.1
-                        },
-                        {
-                            label: 'New Users',
-                            data: newUsersData,
-                            borderColor: 'rgba(255, 159, 64, 1)',
-                            backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                            tension: 0.1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Count' }
-                        },
-                        x: {
-                            title: { display: true, text: 'Date' }
-                        }
-                    }
-                }
-            });
-        }
-
         async function copyAllEmails() {
             try {
                 const adminPassword = window.ADMIN_PASSWORD;
@@ -1833,11 +1866,14 @@ console.log('🌐 Using API:', API_BASE_URL);
 
                     if (navigator.clipboard && emailList) {
                         await navigator.clipboard.writeText(emailList);
-                        alert(`Copied ${emails.length} emails to clipboard!`);
+                        alert(`✅ Copied ${emails.length} emails to clipboard!`);
+                    } else {
+                        alert('❌ Clipboard not available');
                     }
                 }
             } catch (error) {
                 console.error('Copy emails error:', error);
+                alert('Failed to copy emails');
             }
         }
 
@@ -1856,21 +1892,24 @@ console.log('🌐 Using API:', API_BASE_URL);
                     link.download = `webiBook-data-${new Date().toISOString().split('T')[0]}.json`;
                     link.click();
                     URL.revokeObjectURL(url);
+                } else {
+                    alert('Failed to export data');
                 }
             } catch (error) {
                 console.error('Export error:', error);
+                alert('Failed to export data');
             }
         }
 
         function clearAllData() {
-            if (confirm('⚠️ Are you sure you want to clear ALL tracking data? This cannot be undone.')) {
-                Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith('webiBook') && key !== 'webiBookAdminAuth') {
-                        localStorage.removeItem(key);
-                    }
-                });
-                alert('All data cleared! Refreshing dashboard...');
+            if (confirm('⚠️ Are you sure you want to clear ALL test data? This cannot be undone.')) {
+                // Clear frontend data
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // Reload dashboard to show empty state
                 loadDashboardData();
+                alert('Test data cleared! Dashboard will refresh.');
             }
         }
 
@@ -1893,6 +1932,59 @@ console.log('🌐 Using API:', API_BASE_URL);
             trackTimeOnPage();
             initAdminAccess();
         });
+
+                // ============================================================================
+        // INITIALIZATION
+        // ============================================================================
+        document.addEventListener('DOMContentLoaded', function () {
+            // Admin password input enter key
+            const passwordInput = document.getElementById('admin-password-input');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        authenticateAdmin();
+                    }
+                });
+            }
+
+            // Update login UI
+            updateLoginUI();
+            
+            // Load events
+            loadEvents();
+            
+            // Update visitor status
+            updateVisitorStatus().catch(console.error);
+            
+            // Track time on page
+            trackTimeOnPage();
+            
+            // Initialize admin access with persistence
+            initAdminAccess();
+            
+            // Auto-refresh dashboard every 30 seconds if admin is logged in
+            if (checkAdminAccess()) {
+                setInterval(() => {
+                    loadDashboardData();
+                }, 30000); // 30 seconds
+            }
+        });
+
+        // Handle page visibility change (for dashboard auto-refresh)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && checkAdminAccess()) {
+                // Page became visible and admin is logged in, refresh dashboard
+                loadDashboardData();
+            }
+        });
+
+                // Refresh dashboard manually
+        function refreshDashboard() {
+            if (checkAdminAccess()) {
+                loadDashboardData();
+                alert('Dashboard refreshed!');
+            }
+        }
     </script>
 </body>
 

@@ -641,6 +641,7 @@ app.post('/api/visits/track', async (req, res) => {
 });
 
 // Track event click
+// Track event click - UPDATED TO PROPERLY UPDATE EVENT COUNT
 app.post('/api/events/click', async (req, res) => {
     try {
         const { eventId, eventTitle, eventTopic } = req.body;
@@ -679,43 +680,55 @@ app.post('/api/events/click', async (req, res) => {
             }
         };
         
-        // MongoDB
-        if (EventClick && mongoose.connection.readyState === 1) {
+        // MongoDB - Save click AND update event count
+        if (mongoose.connection.readyState === 1) {
             try {
-                const eventClick = new EventClick(clickData);
-                await eventClick.save();
+                // 1. Save the click in EventClick collection
+                if (EventClick) {
+                    const eventClick = new EventClick(clickData);
+                    await eventClick.save();
+                }
                 
-                // Update event click count
-                await Event.findOneAndUpdate(
-                    { eventId },
-                    { $inc: { clickCount: 1 } },
-                    { upsert: true }
-                );
+                // 2. Update the event's click count - FIXED
+                if (Event) {
+                    await Event.findOneAndUpdate(
+                        { eventId: eventId },
+                        { 
+                            $inc: { clickCount: 1 },
+                            $set: { 
+                                title: eventTitle || undefined,
+                                topic: eventTopic || undefined
+                            }
+                        },
+                        { upsert: true, new: true }
+                    );
+                }
+                
+                console.log(`✅ Event click tracked and count updated for ${eventId}`);
+                
             } catch (dbError) {
-                console.log('⚠️ Event click save failed:', dbError.message);
+                console.error('⚠️ Event click save failed:', dbError.message);
             }
         }
         
-        // Memory
-        const key = `${eventId}_${userId || 'anonymous'}`;
-        if (!memoryStorage.eventClicks.has(key)) {
-            memoryStorage.eventClicks.set(key, {
+        // Memory storage - Also update here
+        if (!memoryStorage.eventClicks.has(eventId)) {
+            memoryStorage.eventClicks.set(eventId, {
                 eventId,
                 eventTitle: eventTitle || eventId,
+                eventTopic: eventTopic || 'unknown',
                 count: 1,
                 lastClicked: new Date()
             });
         } else {
-            const existing = memoryStorage.eventClicks.get(key);
+            const existing = memoryStorage.eventClicks.get(eventId);
             existing.count += 1;
             existing.lastClicked = new Date();
         }
         
-        console.log(`📊 Event click tracked: ${eventId}`);
-        
         res.json({
             success: true,
-            message: 'Event click tracked'
+            message: 'Event click tracked and count updated'
         });
         
     } catch (error) {
@@ -760,70 +773,43 @@ app.get('/api/admin/dashboard', async (req, res) => {
         let visits = [];
         
         // MongoDB data
-        if (mongoose.connection.readyState === 1) {
-            try {
-                // Email subscriptions
-                if (EmailSubscription) {
-                    metrics.emailSubscriptions = await EmailSubscription.countDocuments({ isActive: true });
-                    emailSubscriptions = await EmailSubscription.find({ isActive: true })
-                        .sort({ subscribedAt: -1 })
-                        .limit(100)
-                        .select('email subscribedAt')
-                        .lean();
+        // In the admin dashboard route, update the event clicks aggregation:
+if (EventClick && mongoose.connection.readyState === 1) {
+    try {
+        eventClicks = await EventClick.aggregate([
+            { 
+                $group: {
+                    _id: '$eventId',
+                    title: { $first: '$eventTitle' },
+                    topic: { $first: '$eventTopic' },
+                    count: { $sum: 1 },
+                    lastClicked: { $max: '$clickedAt' }
                 }
-                
-                // Users
-                if (User) {
-                    metrics.totalUsers = await User.countDocuments();
-                    users = await User.find()
-                        .sort({ lastVisit: -1 })
-                        .limit(50)
-                        .select('email savedEvents visitCount firstVisit lastVisit')
-                        .lean();
-                    
-                    // Calculate total saved events
-                    metrics.totalSavedEvents = users.reduce((total, user) => {
-                        return total + (user.savedEvents?.length || 0);
-                    }, 0);
-                }
-                
-                // Visits
-                if (Visit) {
-                    metrics.totalVisits = await Visit.countDocuments();
-                    visits = await Visit.find()
-                        .sort({ visitedAt: -1 })
-                        .limit(20)
-                        .select('visitedAt deviceInfo location isReturning')
-                        .lean();
-                    
-                    // Calculate unique visitors and return rate
-                    const uniqueSessions = await Visit.distinct('sessionId');
-                    metrics.uniqueVisitors = uniqueSessions.length;
-                    const returningVisits = await Visit.countDocuments({ isReturning: true });
-                    metrics.returnRate = metrics.totalVisits > 0 
-                        ? `${Math.round((returningVisits / metrics.totalVisits) * 100)}%` 
-                        : '0%';
-                }
-                
-                // Event clicks
-                if (EventClick) {
-                    eventClicks = await EventClick.aggregate([
-                        { $group: {
-                            _id: '$eventId',
-                            title: { $first: '$eventTitle' },
-                            topic: { $first: '$eventTopic' },
-                            count: { $sum: 1 },
-                            lastClicked: { $max: '$clickedAt' }
-                        }},
-                        { $sort: { count: -1 } },
-                        { $limit: 20 }
-                    ]);
-                }
-                
-            } catch (dbError) {
-                console.log('⚠️ Dashboard data fetch failed:', dbError.message);
-            }
+            },
+            { $sort: { count: -1 } },
+            { $limit: 20 }
+        ]);
+        
+        // Also get events to show all event data
+        if (Event) {
+            const allEvents = await Event.find().lean();
+            eventClicks = eventClicks.map(click => {
+                const event = allEvents.find(e => e.eventId === click._id);
+                return {
+                    _id: click._id,
+                    title: click.title || (event?.title || 'Unknown Event'),
+                    topic: click.topic || (event?.topic || 'Unknown'),
+                    count: click.count,
+                    lastClicked: click.lastClicked,
+                    savedCount: event?.savedCount || 0,
+                    clickCount: event?.clickCount || 0
+                };
+            });
         }
+    } catch (dbError) {
+        console.log('⚠️ Event clicks aggregation failed:', dbError.message);
+    }
+}
         
         // Fallback to memory data
         if (metrics.totalUsers === 0) {
