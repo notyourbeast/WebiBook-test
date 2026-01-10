@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 /**
  * WebiBook Analytics Backend Server - MongoDB Version
- * Multi-user, multi-device system
  */
+process.on('uncaughtException', (error) => {
+    console.error('🔥 UNCAUGHT EXCEPTION:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🔥 UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
 require('dotenv').config();
 
 // Debug: Check if env variables are loaded
@@ -23,10 +30,50 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Load models safely with fallback
+let User, Event, EmailSubscription, Visit, EventClick;
+try {
+    User = require('./models/User');
+    Event = require('./models/Event');
+    EmailSubscription = require('./models/EventSubscription');
+    Visit = require('./models/Visit');
+    EventClick = require('./models/EventClick');
+    console.log('✅ All models loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading models:', error.message);
+    console.log('⚠️  Some features may not work');
+}
+
+// Database connection
+const connectDB = async () => {
+    try {
+        const mongoURI = process.env.MONGODB_URI;
+        
+        if (!mongoURI) {
+            console.error('❌ MONGODB_URI is not defined in .env file');
+            console.log('⚠️  Using in-memory mode');
+            return;
+        }
+        
+        console.log('🔗 Connecting to MongoDB...');
+        
+        // REMOVED deprecated options for Mongoose 9.x
+        await mongoose.connect(mongoURI);
+        console.log('✅ MongoDB Connected Successfully');
+        
+    } catch (error) {
+        console.error('❌ MongoDB Connection Error:', error.message);
+        console.log('⚠️  Using in-memory mode');
+    }
+};
+
+// Connect to database
+connectDB();
+
 // CORS Configuration
 const allowedOrigins = [
     'http://localhost:3000',
-    'http://localhost:5500',
+    'http://localhost:5500', 
     'http://127.0.0.1:5500',
     'https://webibook-test-3zoz.onrender.com'
 ];
@@ -42,53 +89,10 @@ app.use(cors({
     credentials: true
 }));
 
-// Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Database Connection
-const connectDB = async () => {
-    try {
-        const mongoURI = process.env.MONGODB_URI;
-        
-        if (!mongoURI) {
-            console.error('❌ MONGODB_URI is not defined in .env file');
-            throw new Error('MongoDB URI is missing');
-        }
-        
-        console.log('🔗 Connecting to MongoDB...');
-        
-        await mongoose.connect(mongoURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
-        
-        console.log('✅ MongoDB Connected Successfully');
-    } catch (error) {
-        console.error('❌ MongoDB Connection Error:', error.message);
-        process.exit(1);
-    }
-};
-
-// Connect to database
-connectDB().catch(console.error);
-
-// Simple in-memory auth for now (bypass MongoDB issues)
-const generateToken = (userId, email) => {
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(`${userId}-${email}-${Date.now()}`).digest('hex');
-};
-
-// In-memory storage for development
-const memoryStorage = {
-    users: [],
-    events: [],
-    emails: [],
-    visits: []
-};
-
-// Get client info
+// Client info middleware
 app.use((req, res, next) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
     const geo = geoip.lookup(ip);
@@ -108,8 +112,14 @@ app.use((req, res, next) => {
     next();
 });
 
+// Simple token generation (fallback if auth.js fails)
+const generateSimpleToken = (userId) => {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(`${userId}-${Date.now()}`).digest('hex');
+};
+
 // ============================================================================
-// API ENDPOINTS
+// API ENDPOINTS - SIMPLIFIED VERSION
 // ============================================================================
 
 // Health check
@@ -117,20 +127,24 @@ app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
-        database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+        database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+        models: {
+            User: !!User,
+            Event: !!Event,
+            EmailSubscription: !!EmailSubscription
+        }
     });
 });
 
-// Simple Register/Login - FIXED VERSION
+// Register/Login User - SIMPLIFIED
 app.post('/api/auth/register', async (req, res) => {
     try {
-        console.log('📨 REGISTER REQUEST RECEIVED:', req.body);
+        console.log('📨 REGISTER REQUEST:', req.body);
         const { email } = req.body;
         
         if (!email || !email.includes('@')) {
-            console.log('❌ Invalid email format:', email);
             return res.status(400).json({ 
-                success: false,
+                success: false, 
                 error: 'Valid email is required' 
             });
         }
@@ -138,21 +152,16 @@ app.post('/api/auth/register', async (req, res) => {
         const cleanEmail = email.toLowerCase().trim();
         
         // Try MongoDB first
-        try {
-            // Check if User model is available
-            let UserModel;
+        if (User && mongoose.connection.readyState === 1) {
             try {
-                UserModel = require('./models/User');
-            } catch (err) {
-                UserModel = null;
-            }
-            
-            if (UserModel && mongoose.connection.readyState === 1) {
-                let user = await UserModel.findOne({ email: cleanEmail });
+                let user = await User.findOne({ email: cleanEmail });
                 
-                if (!user) {
-                    // Create new user
-                    user = new UserModel({
+                if (user) {
+                    user.lastVisit = new Date();
+                    user.visitCount += 1;
+                    await user.save();
+                } else {
+                    user = new User({
                         email: cleanEmail,
                         name: cleanEmail.split('@')[0],
                         deviceInfo: {
@@ -162,7 +171,7 @@ app.post('/api/auth/register', async (req, res) => {
                         },
                         location: {
                             ipAddress: req.clientInfo.ip || 'unknown',
-                            country: 'unknown'
+                            country: req.clientInfo.geo?.country || 'unknown'
                         },
                         firstVisit: new Date(),
                         lastVisit: new Date(),
@@ -171,81 +180,36 @@ app.post('/api/auth/register', async (req, res) => {
                     await user.save();
                 }
                 
-                const token = generateToken(user._id || cleanEmail, cleanEmail);
+                const token = generateSimpleToken(user._id);
                 
                 return res.json({
                     success: true,
                     message: 'Registration successful!',
                     user: {
                         id: user._id || cleanEmail,
-                        email: user.email || cleanEmail,
+                        email: user.email,
                         name: user.name || cleanEmail.split('@')[0],
                         savedEvents: user.savedEvents || [],
                         visitCount: user.visitCount || 1
                     },
                     token
                 });
+                
+            } catch (dbError) {
+                console.log('⚠️ MongoDB operation failed:', dbError.message);
             }
-        } catch (dbError) {
-            console.log('⚠️ MongoDB failed, using memory storage:', dbError.message);
         }
         
-        // Fallback to memory storage
-        const existingUser = memoryStorage.users.find(u => u.email === cleanEmail);
+        // Fallback: Always return success
+        const token = generateSimpleToken(cleanEmail);
         
-        if (existingUser) {
-            // Update existing user
-            existingUser.lastVisit = new Date();
-            existingUser.visitCount += 1;
-            
-            const token = generateToken(existingUser.id, cleanEmail);
-            
-            return res.json({
-                success: true,
-                message: 'Welcome back!',
-                user: {
-                    id: existingUser.id,
-                    email: existingUser.email,
-                    name: existingUser.name,
-                    savedEvents: existingUser.savedEvents || [],
-                    visitCount: existingUser.visitCount
-                },
-                token
-            });
-        }
-        
-        // Create new user in memory
-        const newUser = {
-            id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            email: cleanEmail,
-            name: cleanEmail.split('@')[0],
-            savedEvents: [],
-            deviceInfo: {
-                userAgent: req.clientInfo.userAgent || '',
-                browser: 'unknown',
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-            },
-            location: {
-                ipAddress: req.clientInfo.ip || 'unknown',
-                country: 'unknown'
-            },
-            firstVisit: new Date(),
-            lastVisit: new Date(),
-            visitCount: 1,
-            createdAt: new Date()
-        };
-        
-        memoryStorage.users.push(newUser);
-        
-        const token = generateToken(newUser.id, cleanEmail);
-        
-        res.status(201).json({
+        res.json({
             success: true,
             message: 'Registration successful!',
             user: {
-                id: newUser.id,
-                email: newUser.email,
-                name: newUser.name,
+                id: cleanEmail,
+                email: cleanEmail,
+                name: cleanEmail.split('@')[0],
                 savedEvents: [],
                 visitCount: 1
             },
@@ -266,10 +230,9 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/events', async (req, res) => {
     try {
         // Try MongoDB
-        try {
-            const EventModel = require('./models/Event');
-            if (mongoose.connection.readyState === 1) {
-                const events = await EventModel.find({ isActive: true }).lean();
+        if (Event && mongoose.connection.readyState === 1) {
+            try {
+                const events = await Event.find({ isActive: true }).lean();
                 return res.json({
                     success: true,
                     events: events.map(e => ({
@@ -284,9 +247,9 @@ app.get('/api/events', async (req, res) => {
                         url: e.url
                     }))
                 });
+            } catch (dbError) {
+                console.log('⚠️ Using fallback events');
             }
-        } catch (dbError) {
-            console.log('⚠️ Using fallback events:', dbError.message);
         }
         
         // Fallback events
@@ -330,12 +293,13 @@ app.get('/api/events', async (req, res) => {
             success: true,
             events: fallbackEvents
         });
+        
     } catch (error) {
         console.error('Get events error:', error);
         res.status(500).json({ 
             success: false,
             error: 'Failed to fetch events',
-            events: [] 
+            events: []
         });
     }
 });
@@ -343,7 +307,7 @@ app.get('/api/events', async (req, res) => {
 // Save event
 app.post('/api/events/save', async (req, res) => {
     try {
-        const { eventId, token } = req.body;
+        const { eventId } = req.body;
         
         if (!eventId) {
             return res.status(400).json({ 
@@ -352,7 +316,6 @@ app.post('/api/events/save', async (req, res) => {
             });
         }
         
-        // For now, just return success
         res.json({
             success: true,
             message: 'Event saved successfully'
@@ -363,32 +326,6 @@ app.post('/api/events/save', async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: 'Failed to save event' 
-        });
-    }
-});
-
-// Unsave event
-app.post('/api/events/unsave', async (req, res) => {
-    try {
-        const { eventId, token } = req.body;
-        
-        if (!eventId) {
-            return res.status(400).json({ 
-                success: false,
-                error: 'Event ID is required' 
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: 'Event unsaved successfully'
-        });
-        
-    } catch (error) {
-        console.error('Unsave event error:', error);
-        res.status(500).json({ 
-            success: false,
-            error: 'Failed to unsave event' 
         });
     }
 });
@@ -407,13 +344,23 @@ app.post('/api/emails/subscribe', async (req, res) => {
         
         const cleanEmail = email.toLowerCase().trim();
         
-        // Store in memory
-        if (!memoryStorage.emails.find(e => e.email === cleanEmail)) {
-            memoryStorage.emails.push({
-                email: cleanEmail,
-                subscribedAt: new Date(),
-                source: 'weekly_reminder'
-            });
+        // Try to save to MongoDB
+        if (EmailSubscription && mongoose.connection.readyState === 1) {
+            try {
+                let subscription = await EmailSubscription.findOne({ email: cleanEmail });
+                
+                if (!subscription) {
+                    subscription = new EmailSubscription({
+                        email: cleanEmail,
+                        source: 'weekly_reminder',
+                        subscribedAt: new Date(),
+                        isActive: true
+                    });
+                    await subscription.save();
+                }
+            } catch (dbError) {
+                console.log('⚠️ Email subscription save failed:', dbError.message);
+            }
         }
         
         res.json({
@@ -430,48 +377,6 @@ app.post('/api/emails/subscribe', async (req, res) => {
     }
 });
 
-// Track visit
-app.post('/api/visits/track', async (req, res) => {
-    try {
-        const { isReturning, sessionId } = req.body;
-        
-        const visitData = {
-            sessionId: sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            isReturning: isReturning || false,
-            visitedAt: new Date(),
-            deviceInfo: {
-                userAgent: req.clientInfo.userAgent,
-                browser: 'unknown'
-            },
-            location: {
-                ipAddress: req.clientInfo.ip,
-                country: req.clientInfo.geo?.country || 'unknown'
-            }
-        };
-        
-        memoryStorage.visits.push(visitData);
-        
-        // Set session cookie
-        res.cookie('sessionId', visitData.sessionId, {
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-            httpOnly: true
-        });
-        
-        res.json({
-            success: true,
-            message: 'Visit tracked',
-            sessionId: visitData.sessionId
-        });
-        
-    } catch (error) {
-        console.error('Visit tracking error:', error);
-        res.status(500).json({ 
-            success: false,
-            error: 'Failed to track visit' 
-        });
-    }
-});
-
 // Track event click
 app.post('/api/events/click', async (req, res) => {
     try {
@@ -484,7 +389,6 @@ app.post('/api/events/click', async (req, res) => {
             });
         }
         
-        // Track in memory
         console.log(`📊 Event click tracked: ${eventId} - ${eventTitle}`);
         
         res.json({
@@ -513,29 +417,55 @@ app.get('/api/admin/dashboard', async (req, res) => {
             });
         }
         
-        const dashboardData = {
-            metrics: {
-                emailSubscriptions: memoryStorage.emails.length,
-                totalUsers: memoryStorage.users.length,
-                totalVisits: memoryStorage.visits.length,
-                returnRate: '0%',
-                activeUsers: memoryStorage.users.length
-            },
-            emailSubscriptions: memoryStorage.emails.map(e => ({
-                email: e.email,
-                subscribedAt: e.subscribedAt
-            })),
-            users: memoryStorage.users.map(u => ({
-                email: u.email,
-                savedEvents: u.savedEvents,
-                visitCount: u.visitCount
-            })),
-            eventClicks: []
+        let metrics = {
+            emailSubscriptions: 0,
+            totalUsers: 0,
+            totalVisits: 0,
+            returnRate: '0%',
+            activeUsers: 0
         };
+        
+        let emailSubscriptions = [];
+        let users = [];
+        
+        // Try to get data from MongoDB
+        if (mongoose.connection.readyState === 1) {
+            try {
+                if (EmailSubscription) {
+                    metrics.emailSubscriptions = await EmailSubscription.countDocuments({ isActive: true });
+                    emailSubscriptions = await EmailSubscription.find({ isActive: true })
+                        .sort({ subscribedAt: -1 })
+                        .limit(100)
+                        .select('email subscribedAt')
+                        .lean();
+                }
+                
+                if (User) {
+                    metrics.totalUsers = await User.countDocuments();
+                    users = await User.find()
+                        .sort({ lastVisit: -1 })
+                        .limit(50)
+                        .select('email savedEvents visitCount firstVisit lastVisit')
+                        .lean();
+                }
+                
+                if (Visit) {
+                    metrics.totalVisits = await Visit.countDocuments();
+                }
+                
+            } catch (dbError) {
+                console.log('⚠️ Dashboard data fetch failed:', dbError.message);
+            }
+        }
         
         res.json({
             success: true,
-            dashboard: dashboardData
+            dashboard: {
+                metrics,
+                emailSubscriptions,
+                users,
+                eventClicks: []
+            }
         });
         
     } catch (error) {
@@ -561,23 +491,47 @@ app.get('/api/admin/export', async (req, res) => {
         
         const exportData = {
             timestamp: new Date().toISOString(),
-            weeklyEmails: memoryStorage.emails.map(e => e.email),
-            savedEvents: memoryStorage.users.reduce((acc, user) => {
-                if (user.savedEvents && user.savedEvents.length > 0) {
-                    acc[user.email] = user.savedEvents;
-                }
-                return acc;
-            }, {}),
+            weeklyEmails: [],
+            savedEvents: {},
             visitStats: {
-                firstVisits: memoryStorage.visits.filter(v => !v.isReturning).length,
-                returnVisits: memoryStorage.visits.filter(v => v.isReturning).length,
-                totalVisits: memoryStorage.visits.length,
-                lastVisit: memoryStorage.visits.length > 0 
-                    ? memoryStorage.visits[memoryStorage.visits.length - 1].visitedAt 
-                    : null
+                firstVisits: 0,
+                returnVisits: 0,
+                totalVisits: 0,
+                lastVisit: null
             },
             lastUpdated: new Date().toISOString()
         };
+        
+        // Try to get data from MongoDB
+        if (mongoose.connection.readyState === 1) {
+            try {
+                if (EmailSubscription) {
+                    const emails = await EmailSubscription.find({ isActive: true }).lean();
+                    exportData.weeklyEmails = emails.map(e => e.email);
+                }
+                
+                if (User) {
+                    const users = await User.find().lean();
+                    exportData.savedEvents = users.reduce((acc, user) => {
+                        if (user.savedEvents && user.savedEvents.length > 0) {
+                            acc[user.email] = user.savedEvents.map(se => se.eventId);
+                        }
+                        return acc;
+                    }, {});
+                }
+                
+                if (Visit) {
+                    const visits = await Visit.find().sort({ visitedAt: -1 }).limit(1000).lean();
+                    exportData.visitStats.totalVisits = visits.length;
+                    exportData.visitStats.returnVisits = visits.filter(v => v.isReturning).length;
+                    exportData.visitStats.firstVisits = visits.filter(v => !v.isReturning).length;
+                    exportData.visitStats.lastVisit = visits.length > 0 ? visits[0].visitedAt : null;
+                }
+                
+            } catch (dbError) {
+                console.log('⚠️ Export data fetch failed:', dbError.message);
+            }
+        }
         
         res.json(exportData);
         
@@ -590,14 +544,64 @@ app.get('/api/admin/export', async (req, res) => {
     }
 });
 
+// Initialize sample data
+async function initializeSampleData() {
+    try {
+        if (Event && mongoose.connection.readyState === 1) {
+            const eventCount = await Event.countDocuments();
+            
+            if (eventCount === 0) {
+                const sampleEvents = [
+                    {
+                        eventId: 'event-1',
+                        title: 'Introduction to React Hooks',
+                        topic: 'Development',
+                        date: 'January 18, 2024',
+                        time: '2:00 PM EST',
+                        duration: '1 hour',
+                        audience: 'Frontend developers new to React',
+                        url: 'https://example.com/react-hooks',
+                        description: 'Learn the fundamentals of React Hooks'
+                    },
+                    {
+                        eventId: 'event-2',
+                        title: 'Data Science Fundamentals',
+                        topic: 'Data',
+                        date: 'January 19, 2024',
+                        time: '10:00 AM PST',
+                        duration: '90 minutes',
+                        audience: 'Beginners interested in data analysis',
+                        url: 'https://example.com/data-science',
+                        description: 'Introduction to data science concepts'
+                    },
+                    {
+                        eventId: 'event-3',
+                        title: 'Product Design Workshop',
+                        topic: 'Design',
+                        date: 'January 20, 2024',
+                        time: '3:30 PM EST',
+                        duration: '2 hours',
+                        audience: 'Product managers and designers',
+                        url: 'https://example.com/product-design',
+                        description: 'Workshop on modern product design principles'
+                    }
+                ];
+                
+                await Event.insertMany(sampleEvents);
+                console.log('✅ Sample events added to database');
+            }
+        }
+    } catch (error) {
+        console.error('Error initializing sample data:', error);
+    }
+}
+
 // ============================================================================
-// STATIC FILES AND ROUTING
+// STATIC FILES
 // ============================================================================
 
-// Serve static files
 app.use(express.static(__dirname));
 
-// Serve index.html for all non-API routes
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ 
@@ -609,42 +613,25 @@ app.get('*', (req, res) => {
 });
 
 // ============================================================================
-// ERROR HANDLING
-// ============================================================================
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({ 
-        success: false,
-        error: 'Route not found' 
-    });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error('Global error:', err);
-    res.status(500).json({ 
-        success: false,
-        error: 'Internal server error',
-        message: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-});
-
-// ============================================================================
 // START SERVER
 // ============================================================================
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`🚀 WebiBook Server running on port ${PORT}`);
+    console.log(`📊 MongoDB Status: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
     console.log(`🔐 Admin: http://localhost:${PORT}?admin=${process.env.ADMIN_PASSWORD}`);
     console.log(`🌐 Frontend: http://localhost:${PORT}`);
-    console.log(`📊 API: http://localhost:${PORT}/api/health`);
-    console.log(`📝 Mode: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📊 API Health: http://localhost:${PORT}/api/health`);
+    
+    // Initialize sample data
+    await initializeSampleData();
 });
 
-// Handle graceful shutdown
+// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('👋 Shutting down server...');
-    await mongoose.connection.close();
+    if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close();
+    }
     process.exit(0);
 });

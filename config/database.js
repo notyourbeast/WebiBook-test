@@ -1,4 +1,4 @@
-// config/database.js - SIMPLIFIED
+// config/database.js - FIXED FOR MONGOOSE 9.x
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
@@ -6,25 +6,30 @@ const connectDB = async () => {
         const mongoURI = process.env.MONGODB_URI;
         
         if (!mongoURI) {
-            console.log('⚠️  MONGODB_URI not found, using memory storage');
+            console.error('❌ MONGODB_URI is not defined in .env file');
+            console.log('⚠️  Using in-memory database for development');
             return;
         }
         
-        console.log('🔗 Attempting MongoDB connection...');
+        console.log('🔗 Connecting to MongoDB...');
         
-        await mongoose.connect(mongoURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
-            socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+        // REMOVED deprecated options for Mongoose 9.x
+        await mongoose.connect(mongoURI);
+        console.log('✅ MongoDB Connected Successfully');
+        
+        // Connection event listeners
+        mongoose.connection.on('error', (err) => {
+            console.error('❌ MongoDB connection error:', err);
         });
         
-        console.log('✅ MongoDB Connected Successfully');
+        mongoose.connection.on('disconnected', () => {
+            console.log('⚠️  MongoDB disconnected');
+        });
         
     } catch (error) {
         console.error('❌ MongoDB Connection Error:', error.message);
-        console.log('⚠️  Using memory storage instead');
-        // Don't exit process, use memory storage
+        console.log('⚠️  Server will continue without database connection');
+        // Don't exit process for development
     }
 };
 
