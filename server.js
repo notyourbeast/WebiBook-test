@@ -75,7 +75,8 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5500', 
     'http://127.0.0.1:5500',
-    'https://webibook-test-3zoz.onrender.com'
+    'https://webibook-test-3zoz.onrender.com',
+    'https://webibook-test.netlify.app/',
 ];
 
 app.use(cors({
