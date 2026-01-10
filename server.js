@@ -36,10 +36,17 @@ const PORT = process.env.PORT || 3000;
 
 // Connect to MongoDB
 connectDB();
+// At the top of server.js, add this for production
+if (process.env.NODE_ENV === 'production') {
+    console.log('🚀 Running in production mode');
+}
 
-// Middleware
+// Update CORS for production
 app.use(cors({
-    origin: true,
+    origin: [
+        'https://webibook-test.netlify.app',
+        'http://localhost:3000'
+    ],
     credentials: true
 }));
 app.use(express.json());
