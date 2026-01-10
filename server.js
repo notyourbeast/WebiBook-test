@@ -21,13 +21,13 @@ const path = require('path');
 const geoip = require('geoip-lite');
 
 // Database and Models - CORRECT PATHS FOR YOUR STRUCTURE
-const connectDB = require('../config/database');  // database.js is in config/
-const User = require('../models/User');           // User.js is in models/
-const Event = require('../models/Event');         // Event.js is in models/
-const EmailSubscription = require('../models/EventSubscription'); // models/
-const Visit = require('../models/Visit');         // models/
-const EventClick = require('../models/EventClick'); // models/
-const auth = require('../middleware/auth');       // auth.js is in middleware/
+const connectDB = require('./config/database');  // database.js is in config/
+const User = require('./models/User');           // User.js is in models/
+const Event = require('./models/Event');         // Event.js is in models/
+const EmailSubscription = require('./models/EventSubscription'); // models/
+const Visit = require('./models/Visit');         // models/
+const EventClick = require('./models/EventClick'); // models/
+const auth = require('./middleware/auth');       // auth.js is in middleware/
 
 
 
@@ -845,15 +845,15 @@ async function initializeSampleData() {
 // STATIC FILES AND ROUTING
 // ============================================================================
 
-// Serve static files from project root (not src folder)
-app.use(express.static(path.join(__dirname, '..')));
+// Serve static files from current directory
+app.use(express.static(__dirname));
 
 // Serve index.html for all non-API routes
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, '..', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // ============================================================================
