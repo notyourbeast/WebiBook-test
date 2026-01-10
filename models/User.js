@@ -1,3 +1,4 @@
+// models/User.js - FIXED VERSION
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -53,10 +54,24 @@ const userSchema = new mongoose.Schema({
     }
 });
 
-// Update timestamp on save
-userSchema.pre('save', function(next) {
-    this.updatedAt = Date.now();
-    next();
+// FIX 1: Remove or fix the pre-save hook - OPTION A (remove it)
+// Simply remove these lines entirely:
+// userSchema.pre('save', function(next) {
+//     this.updatedAt = Date.now();
+//     next();
+// });
+
+// FIX 2: Or use async version - OPTION B (update it)
+userSchema.pre('save', async function(next) {
+    try {
+        this.updatedAt = Date.now();
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
+
+// FIX 3: Or remove the hook entirely and handle it differently - OPTION C
+// Comment out the entire pre-save hook and let Mongoose handle timestamps
 
 module.exports = mongoose.model('User', userSchema);

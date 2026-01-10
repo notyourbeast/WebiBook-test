@@ -49,29 +49,23 @@ if (process.env.NODE_ENV === 'production') {
     console.log('🚀 Running in production mode');
 }
 
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? ['https://webibook-test.netlify.app']
+    : ['http://localhost:3000', 'http://localhost:5500', 'http://127.0.0.1:5500'];
+
 // Update CORS configuration (~line 35)
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
         
-        const allowedOrigins = [
-            'https://webibook-test.netlify.app',
-            'http://localhost:3000',
-            'http://localhost:5500',
-            'http://127.0.0.1:5500',
-            'https://webibook-test-3zoz.onrender.com'
-        ];
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
         }
+        return callback(null, true);
     },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    credentials: true
 }));
 
 // Handle preflight requests

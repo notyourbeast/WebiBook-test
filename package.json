@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "kill-port": "echo 'Not available on Render'"
+    "local": "nodemon server.js"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",
