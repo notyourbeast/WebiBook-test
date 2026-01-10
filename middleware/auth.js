@@ -1,6 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('./User');
-
+const User = require('../models/User');  // This is correct for your structure
 const auth = {
     // Generate JWT Token
     generateToken: (userId) => {

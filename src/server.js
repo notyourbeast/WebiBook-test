@@ -20,14 +20,14 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const geoip = require('geoip-lite');
 
-// Database and Models - FIXED PATHS
-const connectDB = require('./src/database');
-const User = require('./src/User');
-const Event = require('./src/Event');
-const EmailSubscription = require('./src/EventSubscription');
-const Visit = require('./src/Visit');
-const EventClick = require('./src/EventClick');
-const auth = require('./src/auth');
+// Database and Models - CORRECT PATHS FOR YOUR STRUCTURE
+const connectDB = require('../config/database');  // database.js is in config/
+const User = require('../models/User');           // User.js is in models/
+const Event = require('../models/Event');         // Event.js is in models/
+const EmailSubscription = require('../models/EventSubscription'); // models/
+const Visit = require('../models/Visit');         // models/
+const EventClick = require('../models/EventClick'); // models/
+const auth = require('../middleware/auth');       // auth.js is in middleware/
 
 
 
@@ -845,15 +845,14 @@ async function initializeSampleData() {
 // STATIC FILES AND ROUTING
 // ============================================================================
 
-// Serve static files from current directory (not parent)
-app.use(express.static(__dirname));
+// Serve static files from project root (not src folder)
+app.use(express.static(path.join(__dirname, '..')));
 
 // Serve index.html for all non-API routes
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
     }
-    // If index.html is in the root (not in src), use:
     res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
