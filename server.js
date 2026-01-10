@@ -3,7 +3,15 @@
  * WebiBook Analytics Backend Server - MongoDB Version
  * Multi-user, multi-device system
  */
+// Add after your imports
+process.on('uncaughtException', (error) => {
+    console.error('🔥 UNCAUGHT EXCEPTION:', error);
+    console.error('🔥 Error stack:', error.stack);
+});
 
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🔥 UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
 require('dotenv').config();
 
 // Debug: Check if env variables are loaded
@@ -41,14 +49,33 @@ if (process.env.NODE_ENV === 'production') {
     console.log('🚀 Running in production mode');
 }
 
-// Update CORS for production
+// Update CORS configuration (~line 35)
 app.use(cors({
-    origin: [
-        'https://webibook-test.netlify.app',
-        'http://localhost:3000'
-    ],
-    credentials: true
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'https://webibook-test.netlify.app',
+            'http://localhost:3000',
+            'http://localhost:5500',
+            'http://127.0.0.1:5500',
+            'https://webibook-test-3zoz.onrender.com'
+        ];
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 app.use(express.json());
 app.use(cookieParser());
 
