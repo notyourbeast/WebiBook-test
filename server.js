@@ -21,12 +21,12 @@ const path = require('path');
 const geoip = require('geoip-lite');
 
 // Database and Models - FIXED PATHS
-const connectDB = require('./config/database');
-const User = require('./models/User');  // FIXED: Removed ../
-const Event = require('./models/Event');
-const EmailSubscription = require('./models/EventSubscription');
-const Visit = require('./models/Visit');
-const EventClick = require('./models/EventClick');
+const connectDB = require('./database');  // Remove config/ since database.js is in same dir
+const User = require('./User');           // Remove models/ prefix
+const Event = require('./Event');
+const EmailSubscription = require('./EventSubscription');
+const Visit = require('./Visit');
+const EventClick = require('./EventClick');
 
 // Middleware
 const auth = require('./middleware/auth');
@@ -845,15 +845,15 @@ async function initializeSampleData() {
 // STATIC FILES AND ROUTING
 // ============================================================================
 
-// Serve static files from parent directory
-app.use(express.static(path.join(__dirname, '..')));
+// Serve static files from current directory (not parent)
+app.use(express.static(__dirname));
 
-// Serve index.html for all non-API routes (SPA fallback)
+// Serve index.html for all non-API routes
 app.get('*', (req, res) => {
     if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, '..', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // ============================================================================
