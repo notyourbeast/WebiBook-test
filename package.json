@@ -2,10 +2,10 @@
   "name": "webibook",
   "version": "1.0.0",
   "description": "WebiBook - Live Learning Events Platform",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
     "kill-port": "echo 'Not available on Render'"
   },
   "dependencies": {
