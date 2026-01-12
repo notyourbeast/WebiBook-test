@@ -1,0 +1,558 @@
+/* ============================================================================
+           UX OPTIMIZATION: System fonts, generous spacing, clean hierarchy
+           ============================================================================ */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            /* System fonts for native feel and performance */
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.7;
+            /* Increased for better readability */
+            color: #1a1a1a;
+            background-color: #ffffff;
+            padding: 32px 20px;
+            max-width: 950px;
+            /* Wider for better scanability (900-1000px range) */
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 48px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e5e5e5;
+            /* Subtle divider */
+        }
+
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            /* Bolder for clear hierarchy */
+            margin-bottom: 12px;
+            color: #000000;
+            line-height: 1.3;
+        }
+
+        .subtitle {
+            font-size: 17px;
+            color: #4a4a4a;
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+
+        .last-updated {
+            font-size: 14px;
+            color: #888888;
+            /* Muted but visible */
+        }
+
+        .events-list {
+            margin-bottom: 80px;
+        }
+
+        /* ============================================================================
+           EVENT STYLING: Lightweight, scannable, not heavy cards
+           ============================================================================ */
+        .event {
+            padding: 32px 0;
+            /* Generous vertical spacing */
+            border-bottom: 1px solid #e5e5e5;
+            /* Subtle divider instead of box */
+            transition: opacity 0.1s;
+            /* Fast, subtle hover feedback */
+        }
+
+        .event:last-child {
+            border-bottom: none;
+        }
+
+        .event:hover {
+            opacity: 0.85;
+            /* Subtle hover feedback */
+        }
+
+        .event-title {
+            font-size: 22px;
+            font-weight: 700;
+            /* Bold for hierarchy */
+            margin-bottom: 12px;
+            color: #000000;
+            line-height: 1.4;
+        }
+
+        /* Metadata row: topic • date • duration */
+        .event-metadata {
+            font-size: 14px;
+            color: #666666;
+            /* Muted for secondary info */
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+
+        .event-metadata span {
+            display: inline;
+        }
+
+        .event-metadata span:not(:last-child)::after {
+            content: ' • ';
+            margin: 0 6px;
+            color: #999999;
+        }
+
+        .event-topic {
+            font-weight: 500;
+            color: #4a4a4a;
+        }
+
+        /* Description: normal body text, not italic */
+        .event-audience {
+            font-size: 15px;
+            color: #333333;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        /* CTAs aligned to bottom right for consistency */
+        .event-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        /* Primary CTA: solid, neutral, clear */
+        .btn-primary {
+            background: #1a1a1a;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            /* 44px+ height for accessibility */
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            transition: background-color 0.1s;
+            /* Fast transition */
+            min-height: 44px;
+            /* Accessibility: minimum click target */
+        }
+
+        .btn-primary:hover {
+            background: #333333;
+        }
+
+        /* Secondary CTA: outline style */
+        .btn-secondary {
+            background: transparent;
+            color: #4a4a4a;
+            border: 1px solid #d0d0d0;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.1s;
+            /* Fast transition */
+            min-height: 44px;
+            /* Accessibility */
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .btn-secondary:hover {
+            border-color: #999999;
+            color: #333333;
+        }
+
+        /* Saved state: subtle color change, no popups */
+        .btn-secondary.saved {
+            background: #f5f5f5;
+            border-color: #b0b0b0;
+            color: #4a4a4a;
+        }
+
+        /* Trust signal: footer note */
+        .trust-note {
+            font-size: 13px;
+            color: #888888;
+            text-align: center;
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e5e5;
+        }
+
+        /* Email section: clean, not boxed */
+        .email-section {
+            padding: 32px 0;
+            margin-top: 48px;
+            border-top: 1px solid #e5e5e5;
+        }
+
+        .email-section h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .email-section p {
+            font-size: 15px;
+            color: #666666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .email-form {
+            display: flex;
+            gap: 12px;
+        }
+
+        .email-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 15px;
+            font-family: inherit;
+            min-height: 44px;
+            /* Accessibility */
+        }
+
+        .email-input:focus {
+            outline: 2px solid #1a1a1a;
+            outline-offset: -1px;
+            border-color: #1a1a1a;
+        }
+
+        .btn-submit {
+            background: #1a1a1a;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.1s;
+            /* Fast transition */
+            min-height: 44px;
+            /* Accessibility */
+        }
+
+        .btn-submit:hover {
+            background: #333333;
+        }
+
+        /* Ensure all clickable elements have pointer cursor */
+        a,
+        button {
+            cursor: pointer;
+        }
+
+        /* ============================================================================
+           LOGIN SECTION
+           ============================================================================ */
+        .login-section {
+            background: #f8f8f8;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 32px;
+        }
+
+        .login-section.logged-in {
+            background: transparent;
+            border: none;
+            padding: 12px 0;
+        }
+
+        .login-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .login-input {
+            flex: 1;
+            max-width: 300px;
+            padding: 10px 16px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 15px;
+            font-family: inherit;
+            min-height: 44px;
+        }
+
+        .login-greeting {
+            font-size: 15px;
+            color: #333333;
+        }
+
+        .login-greeting strong {
+            color: #000000;
+        }
+
+        .btn-logout {
+            background: transparent;
+            color: #666666;
+            border: 1px solid #d0d0d0;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-left: 12px;
+        }
+
+        .btn-logout:hover {
+            border-color: #999999;
+            color: #333333;
+        }
+
+        /* ============================================================================
+           NAVIGATION TABS
+           ============================================================================ */
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #e5e5e5;
+            margin-bottom: 32px;
+        }
+
+        .nav-tab {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666666;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .nav-tab:hover {
+            color: #333333;
+        }
+
+        .nav-tab.active {
+            color: #000000;
+            border-bottom-color: #000000;
+        }
+
+        /* ============================================================================
+           SAVED EVENTS SECTION
+           ============================================================================ */
+        .saved-events-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666666;
+        }
+
+        .saved-events-empty p {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .saved-events-empty small {
+            font-size: 14px;
+            color: #999999;
+        }
+
+        .section-hidden {
+            display: none;
+        }
+
+        /* ============================================================================
+           ADMIN DASHBOARD (Password Protected)
+           ============================================================================ */
+        .admin-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-overlay.active {
+            display: flex;
+        }
+
+        .admin-login {
+            background: white;
+            padding: 32px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .admin-login h3 {
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .admin-login input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 15px;
+            margin-bottom: 16px;
+        }
+
+        .admin-dashboard {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #f5f5f5;
+            z-index: 10001;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .admin-dashboard.active {
+            display: block;
+        }
+
+        .dashboard-header {
+            background: #1a1a1a;
+            color: white;
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .dashboard-header h2 {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .dashboard-content {
+            padding: 32px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin: 0 0 12px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-card .value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin: 0;
+        }
+
+        .metric-card .change {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .dashboard-section {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-section h3 {
+            font-size: 18px;
+            margin: 0 0 20px 0;
+            color: #1a1a1a;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 12px;
+            background: #f8f8f8;
+            border-bottom: 2px solid #e5e5e5;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .data-table tr:hover {
+            background: #f8f8f8;
+        }
+
+        .btn-admin {
+            background: #1a1a1a;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .btn-admin:hover {
+            background: #333;
+        }
+
+        .btn-admin-danger {
+            background: #d32f2f;
+        }
+
+        .btn-admin-danger:hover {
+            background: #b71c1c;
+        }
+
+        .admin-actions-bar {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e5e5;
+        }

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: webibook-backend
+    name: webibook
     env: node
     buildCommand: npm install
     startCommand: node server.js
@@ -8,8 +8,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: ADMIN_PASSWORD
-        sync: false
+        value: webiBook2024
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: MONGODB_URI
         sync: false

@@ -1,3 +1,4 @@
+// models/EventClick.js - CORRECTED
 const mongoose = require('mongoose');
 
 const eventClickSchema = new mongoose.Schema({
@@ -5,30 +6,20 @@ const eventClickSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    eventTitle: {
-        type: String,
-        required: true
-    },
-    eventTopic: {
-        type: String,
-        required: true
-    },
+    eventTitle: String,
+    eventTopic: String,
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: false
+        ref: 'User'
     },
-    sessionId: {
-        type: String,
-        required: true
-    },
+    userEmail: String,
+    sessionId: String,
     clickedAt: {
         type: Date,
         default: Date.now
     },
     deviceInfo: {
         userAgent: String,
-        deviceType: String,
         browser: String
     },
     location: {

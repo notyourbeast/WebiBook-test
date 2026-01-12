@@ -1,4 +1,4 @@
-// models/User.js - SIMPLIFIED VERSION
+// models/User.js - FINAL FIXED VERSION
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -21,36 +21,15 @@ const userSchema = new mongoose.Schema({
         }
     }],
     deviceInfo: {
-        userAgent: { 
-            type: String, 
-            default: '' 
-        },
-        browser: { 
-            type: String, 
-            default: '' 
-        },
-        os: { 
-            type: String, 
-            default: '' 
-        },
-        timezone: { 
-            type: String, 
-            default: '' 
-        }
+        userAgent: { type: String, default: '' },
+        browser: { type: String, default: '' },
+        os: { type: String, default: '' },
+        timezone: { type: String, default: '' }
     },
     location: {
-        ipAddress: { 
-            type: String, 
-            default: '' 
-        },
-        country: { 
-            type: String, 
-            default: '' 
-        },
-        city: { 
-            type: String, 
-            default: '' 
-        }
+        ipAddress: { type: String, default: '' },
+        country: { type: String, default: '' },
+        city: { type: String, default: '' }
     },
     visitCount: {
         type: Number,
@@ -76,12 +55,9 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     }
-}, {
-    // This replaces the pre-save hook
-    timestamps: false // We handle timestamps manually
 });
 
-// Don't use pre-save hooks that might fail
-// Instead, update updatedAt manually in your routes
+// Remove the problematic pre-save hook completely
+// Just use the default value above
 
 module.exports = mongoose.model('User', userSchema);
