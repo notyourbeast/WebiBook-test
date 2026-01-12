@@ -189,6 +189,45 @@
         .back-btn:hover {
             background: #2d3748;
         }
+
+        .actions-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .action-btn {
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .action-btn:hover {
+            background: #2d3748;
+        }
+
+        .action-btn.success {
+            background: #38a169;
+        }
+
+        .action-btn.success:hover {
+            background: #2f855a;
+        }
+
+        .action-btn.danger {
+            background: #e53e3e;
+        }
+
+        .action-btn.danger:hover {
+            background: #c53030;
+        }
     </style>
 </head>
 <body>
@@ -303,10 +342,19 @@
             <!-- Actions -->
             <div class="dashboard-section">
                 <h3>⚡ Actions</h3>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="back-btn" onclick="exportData()">📥 Export Data</button>
-                    <button class="back-btn" onclick="copyEmails()">📋 Copy Emails</button>
-                    <button class="logout-btn" onclick="clearData()">🗑️ Clear Test Data</button>
+                <div class="actions-container">
+                    <button class="action-btn" onclick="exportData()">
+                        <span>📥</span> Export Data (JSON)
+                    </button>
+                    <button class="action-btn success" onclick="copyEmails()">
+                        <span>📋</span> Copy Emails
+                    </button>
+                    <button class="action-btn danger" onclick="clearData()">
+                        <span>🗑️</span> Clear Test Data
+                    </button>
+                    <button class="action-btn" onclick="refreshData()">
+                        <span>🔄</span> Refresh Data
+                    </button>
                 </div>
             </div>
         </div>
@@ -316,7 +364,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
+        // Configuration
         const ADMIN_PASSWORD = 'webiBook2024'; // Change this to your secure password
+        const API_BASE_URL = 'https://webibook-test-3zoz.onrender.com/api';
         
         // Check if already logged in
         function checkAdminLogin() {
@@ -366,7 +416,8 @@
                     options.body = JSON.stringify(body);
                 }
                 
-                const response = await fetch(`/api${endpoint}`, options);
+                // Use absolute URL with your backend
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
                 
                 if (!response.ok) {
                     throw new Error(`API error: ${response.status}`);
@@ -381,6 +432,9 @@
 
         // Load dashboard data
         async function loadDashboardData() {
+            console.log('Loading dashboard data from:', `${API_BASE_URL}/admin/dashboard?password=${ADMIN_PASSWORD}`);
+            
+            // Show loading states
             document.getElementById('metric-emails').textContent = '...';
             document.getElementById('metric-users').textContent = '...';
             document.getElementById('metric-saved').textContent = '...';
@@ -392,28 +446,34 @@
             });
 
             try {
+                // Call your backend API with the correct endpoint
                 const response = await callAPI(`/admin/dashboard?password=${ADMIN_PASSWORD}`);
+                
+                console.log('Dashboard response:', response);
                 
                 if (response && response.success) {
                     const data = response.dashboard;
                     
                     // Update metrics
-                    document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions;
-                    document.getElementById('metric-users').textContent = data.metrics.totalUsers;
-                    document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents;
-                    document.getElementById('metric-returns').textContent = data.metrics.returnRate;
+                    document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions || 0;
+                    document.getElementById('metric-users').textContent = data.metrics.totalUsers || 0;
+                    document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents || 0;
+                    document.getElementById('metric-returns').textContent = data.metrics.returnRate || '0%';
                     
                     // Populate tables
-                    populateEmailsTable(data.emailSubscriptions);
-                    populateSavedEventsTable(data.users);
-                    populateEventClicksTable(data.eventClicks);
+                    populateEmailsTable(data.emailSubscriptions || []);
+                    populateSavedEventsTable(data.users || []);
+                    populateEventClicksTable(data.eventClicks || []);
                     
                     // Create visit chart
-                    createVisitChart(data.visits);
+                    createVisitChart(data.visits || []);
+                } else {
+                    console.error('Failed to load dashboard:', response?.error);
+                    alert('Failed to load dashboard data. Check console for details.');
                 }
             } catch (error) {
                 console.error('Dashboard error:', error);
-                alert('Failed to load dashboard data');
+                alert('Failed to load dashboard data. Make sure the backend is running.');
             }
         }
 
@@ -448,7 +508,7 @@
                 const savedEvents = user.savedEvents || [];
                 return `
                     <tr>
-                        <td>${user.email}</td>
+                        <td>${user.email || user._id || 'Unknown'}</td>
                         <td>${savedEvents.length}</td>
                         <td>${savedEvents.map(e => e.eventId || e).join(', ') || 'None'}</td>
                     </tr>
@@ -467,10 +527,10 @@
             
             tbody.innerHTML = eventClicks.map(click => `
                 <tr>
-                    <td>${click._id || click.eventId}</td>
+                    <td>${click._id || click.eventId || 'N/A'}</td>
                     <td>${click.title || 'N/A'}</td>
                     <td><strong>${click.count || 0}</strong></td>
-                    <td>${new Date(click.lastClicked || Date.now()).toLocaleString()}</td>
+                    <td>${new Date(click.lastClicked || click.clickedAt || Date.now()).toLocaleString()}</td>
                 </tr>
             `).join('');
         }
@@ -480,12 +540,14 @@
             const ctx = document.getElementById('visits-chart').getContext('2d');
             
             if (!visits || visits.length === 0) {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.fillText('No visit data available', 150, 150);
                 return;
             }
             
             // Group visits by date
             const visitsByDate = visits.reduce((acc, visit) => {
-                const date = new Date(visit.visitedAt).toLocaleDateString();
+                const date = new Date(visit.visitedAt || visit.createdAt).toLocaleDateString();
                 acc[date] = (acc[date] || 0) + 1;
                 return acc;
             }, {});
@@ -493,7 +555,12 @@
             const dates = Object.keys(visitsByDate).slice(-10); // Last 10 days
             const counts = dates.map(date => visitsByDate[date]);
             
-            new Chart(ctx, {
+            // Clear previous chart if exists
+            if (window.visitChart) {
+                window.visitChart.destroy();
+            }
+            
+            window.visitChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: dates,
@@ -501,12 +568,22 @@
                         label: 'Daily Visits',
                         data: counts,
                         borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.1,
+                        fill: true
                     }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -514,7 +591,7 @@
         // Export data
         async function exportData() {
             try {
-                const response = await fetch(`/api/admin/export?password=${ADMIN_PASSWORD}`);
+                const response = await fetch(`${API_BASE_URL}/admin/export?password=${ADMIN_PASSWORD}`);
                 const data = await response.json();
                 
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -522,8 +599,12 @@
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `webibook-export-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+                
+                alert('Data exported successfully!');
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Failed to export data');
@@ -540,6 +621,8 @@
                     
                     await navigator.clipboard.writeText(emailList);
                     alert(`Copied ${emails.length} emails to clipboard!`);
+                } else {
+                    alert('Failed to fetch emails');
                 }
             } catch (error) {
                 console.error('Copy error:', error);
@@ -551,9 +634,16 @@
         function clearData() {
             if (confirm('Are you sure you want to clear ALL test data? This cannot be undone.')) {
                 localStorage.clear();
-                sessionStorage.clear();
-                alert('All local data cleared. Server data remains.');
+                sessionStorage.removeItem('webibookAdminAuth');
+                alert('All local test data cleared. Server data remains.');
+                window.location.reload();
             }
+        }
+
+        // Refresh data
+        function refreshData() {
+            loadDashboardData();
+            alert('Data refreshed!');
         }
 
         // Enter key to login
