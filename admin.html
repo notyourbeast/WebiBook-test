@@ -228,6 +228,20 @@
         .action-btn.danger:hover {
             background: #c53030;
         }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -339,15 +353,41 @@
                 </div>
             </div>
 
+            <!-- All Users List -->
+            <div class="dashboard-section">
+                <h3>👥 All Registered Users</h3>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Email</th>
+                                <th>Name</th>
+                                <th>First Visit</th>
+                                <th>Last Visit</th>
+                                <th>Visit Count</th>
+                                <th>Saved Events</th>
+                            </tr>
+                        </thead>
+                        <tbody id="all-users-table-body">
+                            <tr><td colspan="7">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Actions -->
             <div class="dashboard-section">
                 <h3>⚡ Actions</h3>
                 <div class="actions-container">
-                    <button class="action-btn" onclick="exportData()">
-                        <span>📥</span> Export Data (JSON)
+                    <button class="action-btn" onclick="exportData()" id="export-btn">
+                        <span>📥</span> Export All Data (JSON)
                     </button>
-                    <button class="action-btn success" onclick="copyEmails()">
-                        <span>📋</span> Copy Emails
+                    <button class="action-btn success" onclick="copyAllUserEmails()" id="copy-emails-btn">
+                        <span>📋</span> Copy All User Emails
+                    </button>
+                    <button class="action-btn" onclick="copyEmailSubscriptions()" id="copy-subscriptions-btn">
+                        <span>📋</span> Copy Email Subscriptions
                     </button>
                     <button class="action-btn danger" onclick="clearData()">
                         <span>🗑️</span> Clear Test Data
@@ -356,6 +396,7 @@
                         <span>🔄</span> Refresh Data
                     </button>
                 </div>
+                <div id="copy-status" style="margin-top: 10px; display: none; color: #38a169; font-size: 14px;"></div>
             </div>
         </div>
     </div>
@@ -367,6 +408,10 @@
         // Configuration
         const ADMIN_PASSWORD = 'webiBook2024'; // Change this to your secure password
         const API_BASE_URL = 'https://webibook-test-3zoz.onrender.com/api';
+        
+        // Store data globally
+        let currentDashboardData = null;
+        let currentUsersData = null;
         
         // Check if already logged in
         function checkAdminLogin() {
@@ -440,7 +485,7 @@
             document.getElementById('metric-saved').textContent = '...';
             document.getElementById('metric-returns').textContent = '...';
             
-            const tables = ['emails-table-body', 'saved-events-table-body', 'event-clicks-table-body'];
+            const tables = ['emails-table-body', 'saved-events-table-body', 'event-clicks-table-body', 'all-users-table-body'];
             tables.forEach(id => {
                 document.getElementById(id).innerHTML = '<tr><td colspan="10">Loading...</td></tr>';
             });
@@ -452,21 +497,25 @@
                 console.log('Dashboard response:', response);
                 
                 if (response && response.success) {
-                    const data = response.dashboard;
+                    currentDashboardData = response.dashboard;
                     
                     // Update metrics
-                    document.getElementById('metric-emails').textContent = data.metrics.emailSubscriptions || 0;
-                    document.getElementById('metric-users').textContent = data.metrics.totalUsers || 0;
-                    document.getElementById('metric-saved').textContent = data.metrics.totalSavedEvents || 0;
-                    document.getElementById('metric-returns').textContent = data.metrics.returnRate || '0%';
+                    document.getElementById('metric-emails').textContent = currentDashboardData.metrics.emailSubscriptions || 0;
+                    document.getElementById('metric-users').textContent = currentDashboardData.metrics.totalUsers || 0;
+                    document.getElementById('metric-saved').textContent = currentDashboardData.metrics.totalSavedEvents || 0;
+                    document.getElementById('metric-returns').textContent = currentDashboardData.metrics.returnRate || '0%';
+                    
+                    // Store users data globally
+                    currentUsersData = currentDashboardData.users || [];
                     
                     // Populate tables
-                    populateEmailsTable(data.emailSubscriptions || []);
-                    populateSavedEventsTable(data.users || []);
-                    populateEventClicksTable(data.eventClicks || []);
+                    populateEmailsTable(currentDashboardData.emailSubscriptions || []);
+                    populateSavedEventsTable(currentUsersData);
+                    populateEventClicksTable(currentDashboardData.eventClicks || []);
+                    populateAllUsersTable(currentUsersData);
                     
                     // Create visit chart
-                    createVisitChart(data.visits || []);
+                    createVisitChart(currentDashboardData.visits || []);
                 } else {
                     console.error('Failed to load dashboard:', response?.error);
                     alert('Failed to load dashboard data. Check console for details.');
@@ -535,6 +584,31 @@
             `).join('');
         }
 
+        // Populate all users table
+        function populateAllUsersTable(users) {
+            const tbody = document.getElementById('all-users-table-body');
+            
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7">No registered users</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = users.map((user, index) => {
+                const savedEvents = user.savedEvents || [];
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${user.email || 'No email'}</strong></td>
+                        <td>${user.name || 'No name'}</td>
+                        <td>${user.firstVisit ? new Date(user.firstVisit).toLocaleDateString() : 'N/A'}</td>
+                        <td>${user.lastVisit ? new Date(user.lastVisit).toLocaleDateString() : 'N/A'}</td>
+                        <td>${user.visitCount || 0}</td>
+                        <td>${savedEvents.length}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
         // Create visit chart
         function createVisitChart(visits) {
             const ctx = document.getElementById('visits-chart').getContext('2d');
@@ -588,54 +662,219 @@
             });
         }
 
-        // Export data
+        // Export ALL data from MongoDB - UPDATED
         async function exportData() {
+            const exportBtn = document.getElementById('export-btn');
+            const originalText = exportBtn.innerHTML;
+            
             try {
-                const response = await fetch(`${API_BASE_URL}/admin/export?password=${ADMIN_PASSWORD}`);
-                const data = await response.json();
+                // Show loading state
+                exportBtn.innerHTML = '<span class="loading"></span> Exporting...';
+                exportBtn.disabled = true;
                 
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `webibook-export-${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                // Fetch ALL data from backend
+                const response = await callAPI(`/admin/export?password=${ADMIN_PASSWORD}`);
                 
-                alert('Data exported successfully!');
+                if (response) {
+                    // Create a comprehensive export object
+                    const exportData = {
+                        timestamp: new Date().toISOString(),
+                        exportType: 'FULL_DATABASE_EXPORT',
+                        collections: {
+                            // Current dashboard data
+                            dashboardMetrics: currentDashboardData?.metrics || {},
+                            emailSubscriptions: currentDashboardData?.emailSubscriptions || [],
+                            users: currentUsersData || [],
+                            eventClicks: currentDashboardData?.eventClicks || [],
+                            visits: currentDashboardData?.visits || [],
+                            
+                            // Additional data from export endpoint
+                            weeklyEmails: response.weeklyEmails || [],
+                            savedEvents: response.savedEvents || {},
+                            visitStats: response.visitStats || {},
+                            eventClicksFull: response.eventClicks || []
+                        },
+                        summary: {
+                            totalUsers: currentDashboardData?.metrics?.totalUsers || 0,
+                            totalEmailSubscriptions: currentDashboardData?.metrics?.emailSubscriptions || 0,
+                            totalSavedEvents: currentDashboardData?.metrics?.totalSavedEvents || 0,
+                            totalVisits: currentDashboardData?.metrics?.totalVisits || 0
+                        }
+                    };
+                    
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `webibook-full-export-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    // Show success message
+                    alert(`✅ Full database export successful!\n\nFile includes:
+• ${exportData.collections.users.length} users
+• ${exportData.collections.emailSubscriptions.length} email subscriptions
+• ${exportData.collections.visits.length} visits
+• ${exportData.collections.eventClicks.length} event clicks
+• And more...`);
+                    
+                } else {
+                    alert('Failed to export data from server.');
+                }
+                
             } catch (error) {
                 console.error('Export error:', error);
-                alert('Failed to export data');
+                alert('Failed to export data. Please check console for details.');
+            } finally {
+                // Reset button
+                exportBtn.innerHTML = originalText;
+                exportBtn.disabled = false;
             }
         }
 
-        // Copy emails
-        async function copyEmails() {
+        // Copy ALL user emails from MongoDB users table - UPDATED
+        async function copyAllUserEmails() {
+            const copyBtn = document.getElementById('copy-emails-btn');
+            const originalText = copyBtn.innerHTML;
+            const statusDiv = document.getElementById('copy-status');
+            
             try {
-                const response = await callAPI(`/admin/dashboard?password=${ADMIN_PASSWORD}`);
-                if (response && response.success) {
-                    const emails = response.dashboard.emailSubscriptions || [];
-                    const emailList = emails.map(e => e.email).join('\n');
-                    
-                    await navigator.clipboard.writeText(emailList);
-                    alert(`Copied ${emails.length} emails to clipboard!`);
-                } else {
-                    alert('Failed to fetch emails');
+                // Show loading state
+                copyBtn.innerHTML = '<span class="loading"></span> Copying...';
+                copyBtn.disabled = true;
+                statusDiv.style.display = 'none';
+                
+                // Get current users data
+                const users = currentUsersData || [];
+                
+                if (users.length === 0) {
+                    alert('No users found in the database.');
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.disabled = false;
+                    return;
                 }
+                
+                // Extract ALL user emails (remove duplicates and empty/null)
+                const allEmails = [...new Set(
+                    users
+                        .map(user => user.email)
+                        .filter(email => email && email.trim() !== '')
+                )];
+                
+                if (allEmails.length === 0) {
+                    alert('No valid email addresses found.');
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.disabled = false;
+                    return;
+                }
+                
+                // Create formatted email list with ONE blank line between each email
+                const formattedEmailList = allEmails.join('\n\n');
+                
+                // Also create numbered version
+                const numberedEmailList = allEmails
+                    .map((email, index) => `${index + 1}. ${email}`)
+                    .join('\n\n');
+                
+                // Copy both versions to clipboard (numbered version)
+                await navigator.clipboard.writeText(numberedEmailList);
+                
+                // Show success message
+                statusDiv.innerHTML = `✅ Copied ${allEmails.length} user emails to clipboard!<br><small>Each email is separated by a blank line.</small>`;
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#38a169';
+                
+                // Log to console for verification
+                console.log('📋 Copied ALL user emails:');
+                console.log(numberedEmailList);
+                console.log('Total emails copied:', allEmails.length);
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.disabled = false;
+                }, 3000);
+                
             } catch (error) {
                 console.error('Copy error:', error);
-                alert('Failed to copy emails');
+                
+                // Show error in status
+                statusDiv.innerHTML = '❌ Failed to copy emails. Please check console.';
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#e53e3e';
+                
+                copyBtn.innerHTML = originalText;
+                copyBtn.disabled = false;
+            }
+        }
+
+        // Copy email subscriptions only
+        async function copyEmailSubscriptions() {
+            const copyBtn = document.getElementById('copy-subscriptions-btn');
+            const originalText = copyBtn.innerHTML;
+            const statusDiv = document.getElementById('copy-status');
+            
+            try {
+                // Show loading state
+                copyBtn.innerHTML = '<span class="loading"></span> Copying...';
+                copyBtn.disabled = true;
+                statusDiv.style.display = 'none';
+                
+                // Get email subscriptions from dashboard data
+                const emailSubscriptions = currentDashboardData?.emailSubscriptions || [];
+                
+                if (emailSubscriptions.length === 0) {
+                    alert('No email subscriptions found.');
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.disabled = false;
+                    return;
+                }
+                
+                // Extract emails
+                const emails = emailSubscriptions
+                    .map(sub => sub.email)
+                    .filter(email => email && email.trim() !== '');
+                
+                // Create formatted email list with ONE blank line between each email
+                const formattedEmailList = emails
+                    .map((email, index) => `${index + 1}. ${email}`)
+                    .join('\n\n');
+                
+                // Copy to clipboard
+                await navigator.clipboard.writeText(formattedEmailList);
+                
+                // Show success message
+                statusDiv.innerHTML = `✅ Copied ${emails.length} email subscriptions to clipboard!<br><small>Each email is separated by a blank line.</small>`;
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#38a169';
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.disabled = false;
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Copy error:', error);
+                
+                // Show error in status
+                statusDiv.innerHTML = '❌ Failed to copy email subscriptions.';
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = '#e53e3e';
+                
+                copyBtn.innerHTML = originalText;
+                copyBtn.disabled = false;
             }
         }
 
         // Clear test data
         function clearData() {
-            if (confirm('Are you sure you want to clear ALL test data? This cannot be undone.')) {
+            if (confirm('⚠️ Are you sure you want to clear ALL test data?\n\nThis will clear local storage and session data.\n\nNote: Server data will remain intact.')) {
                 localStorage.clear();
                 sessionStorage.removeItem('webibookAdminAuth');
-                alert('All local test data cleared. Server data remains.');
+                alert('✅ All local test data cleared.\nServer data remains.');
                 window.location.reload();
             }
         }
