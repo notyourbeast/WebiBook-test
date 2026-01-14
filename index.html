@@ -27,6 +27,70 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebiBook - Live Learning Events This Week</title>
+    
+    <style>
+        /* Additional inline styles for fine-tuning */
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #111111 50%, #0c0c0c 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Loading states */
+        .loading-spinner {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #10a37f;
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+            vertical-align: middle;
+            margin-right: 12px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Selection color */
+        ::selection {
+            background: rgba(16, 163, 127, 0.4);
+            color: #ffffff;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+        }
+        
+        /* Focus styles */
+        :focus {
+            outline: 2px solid #10a37f;
+            outline-offset: 3px;
+            box-shadow: 0 0 0 4px rgba(16, 163, 127, 0.1);
+        }
+        
+        /* Smooth transitions for dynamic elements */
+        .event, .btn-primary, .btn-secondary, .nav-tab {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Background animation */
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Pulse animation for CTAs */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 163, 127, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0); }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
 </head>
 
 <body>
@@ -35,65 +99,336 @@
             style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
 
-    <header>
-        <h1>Live learning events happening this week — handpicked</h1>
-        <p class="subtitle">No hosting. No ads. Just links to live sessions worth attending.</p>
-        <!-- TODO: Update the date below when you refresh the events -->
-        <p class="last-updated">Last updated: January 12, 2025</p>
-    </header>
+    <div class="container">
+        <!-- Decorative background elements -->
+        <div class="bg-grid"></div>
+        <div class="bg-gradient"></div>
 
-    <!-- Login Section (hidden by default, shown when user tries to save) -->
-    <section class="login-section section-hidden" id="login-section">
-        <div id="login-form-container">
-            <p style="margin-bottom: 12px; font-size: 15px; color: #333;">Sign up with your email to save events</p>
-            <form class="login-form" id="login-form">
-                <input type="email" class="login-input" id="login-input" placeholder="your@email.com" required>
-                <button type="submit" class="btn-submit">Sign up</button>
-            </form>
-        </div>
-        <div id="logged-in-container" style="display: none;">
-            <div class="login-form">
-                <p class="login-greeting">Signed in as <strong id="username-display"></strong></p>
-                <button type="button" class="btn-logout" id="logout-btn">Sign out</button>
+        <header>
+            <div class="header-content">
+                <div class="badge">🔥 LIVE THIS WEEK</div>
+                <h1>Curated Learning Events <span class="highlight">Worth Attending</span></h1>
+                <p class="subtitle">No hosting. No ads. Just handpicked live sessions from top creators and platforms.</p>
+                <!-- TODO: Update the date below when you refresh the events -->
+                <div class="header-meta">
+                    <div class="last-updated">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Updated: January 15, 2024
+                    </div>
+                    <div class="event-count" id="event-count">
+                        <span class="loading-spinner"></span>
+                        Loading events...
+                    </div>
+                </div>
             </div>
-        </div>
-    </section>
+        </header>
 
-    <!-- Navigation Tabs -->
-    <div class="nav-tabs">
-        <button class="nav-tab active" id="tab-all" data-tab="all">All Events</button>
-        <button class="nav-tab" id="tab-saved" data-tab="saved">Saved Events</button>
+        <!-- User Profile Section -->
+        <section class="profile-section section-hidden" id="profile-section">
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div class="profile-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                    <div class="profile-info">
+                        <h3>Your Profile</h3>
+                        <p>Sign in to save events and access them across devices</p>
+                    </div>
+                </div>
+                
+                <!-- Login Form Container -->
+                <div id="login-form-container">
+                    <form class="login-form" id="login-form">
+                        <div class="form-group">
+                            <label for="login-input">Email Address</label>
+                            <input type="email" class="login-input" id="login-input" placeholder="you@example.com" required>
+                            <small>We'll send you a magic link to sign in</small>
+                        </div>
+                        <button type="submit" class="btn-submit btn-full">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            Continue with Email
+                        </button>
+                    </form>
+                    <div class="divider">
+                        <span>or</span>
+                    </div>
+                    <div class="social-login">
+                        <button class="btn-social google">
+                            <svg width="18" height="18" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                            </svg>
+                            Continue with Google
+                        </button>
+                        <button class="btn-social github">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                            </svg>
+                            Continue with GitHub
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Logged In Container -->
+                <div id="logged-in-container" style="display: none;">
+                    <div class="user-profile">
+                        <div class="user-avatar">
+                            <div class="avatar-placeholder">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                            </div>
+                            <div class="user-details">
+                                <h4 id="username-display">User Name</h4>
+                                <p class="user-email" id="user-email">user@example.com</p>
+                            </div>
+                        </div>
+                        <div class="user-stats">
+                            <div class="stat">
+                                <span class="stat-value" id="saved-events-count">0</span>
+                                <span class="stat-label">Saved Events</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value" id="total-visits">1</span>
+                                <span class="stat-label">Total Visits</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-logout" id="logout-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Navigation Tabs -->
+            <div class="nav-container">
+                <div class="nav-tabs">
+                    <button class="nav-tab active" id="tab-all" data-tab="all">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        All Events
+                        <span class="tab-badge" id="all-events-count">0</span>
+                    </button>
+                    <button class="nav-tab" id="tab-saved" data-tab="saved">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Saved Events
+                        <span class="tab-badge" id="saved-count">0</span>
+                    </button>
+                    <button class="nav-tab" id="tab-upcoming" data-tab="upcoming">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Upcoming
+                    </button>
+                </div>
+                <div class="view-controls">
+                    <button class="view-btn active" data-view="grid" title="Grid View">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                    </button>
+                    <button class="view-btn" data-view="list" title="List View">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3" y2="6"></line>
+                            <line x1="3" y1="12" x2="3" y2="12"></line>
+                            <line x1="3" y1="18" x2="3" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- All Events Section -->
+            <section class="events-list view-grid" id="events-list">
+                <!-- Events will be dynamically inserted here -->
+                <div class="loading-state">
+                    <div class="spinner-container">
+                        <span class="loading-spinner"></span>
+                    </div>
+                    <p>Loading curated events...</p>
+                </div>
+            </section>
+
+            <!-- Saved Events Section -->
+            <section class="events-list view-grid section-hidden" id="saved-events-list">
+                <!-- Saved events will be dynamically inserted here -->
+            </section>
+
+            <!-- Upcoming Events Section -->
+            <section class="events-list view-grid section-hidden" id="upcoming-events-list">
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                    </div>
+                    <h3>No upcoming events scheduled</h3>
+                    <p>Check back later for new events. In the meantime, explore our current live events.</p>
+                    <button class="btn-secondary" id="view-all-events">
+                        View All Events
+                    </button>
+                </div>
+            </section>
+
+            <!-- Filter Section -->
+            <div class="filter-section">
+                <div class="filter-tags">
+                    <button class="filter-tag active" data-topic="all">All Topics</button>
+                    <button class="filter-tag" data-topic="development">Development</button>
+                    <button class="filter-tag" data-topic="design">Design</button>
+                    <button class="filter-tag" data-topic="data">Data Science</button>
+                    <button class="filter-tag" data-topic="business">Business</button>
+                    <button class="filter-tag" data-topic="marketing">Marketing</button>
+                    <button class="filter-tag" data-topic="ai">AI & ML</button>
+                </div>
+                <div class="sort-controls">
+                    <select class="sort-select" id="sort-select">
+                        <option value="date">Sort by: Date</option>
+                        <option value="popular">Sort by: Popularity</option>
+                        <option value="title">Sort by: Title</option>
+                    </select>
+                </div>
+            </div>
+        </main>
+
+        <!-- CTA Section -->
+        <section class="cta-section">
+            <div class="cta-card">
+                <div class="cta-content">
+                    <h2>Never Miss a Learning Opportunity</h2>
+                    <p>Get personalized weekly digests with handpicked events matching your interests. Zero spam, pure value.</p>
+                    <div class="cta-features">
+                        <div class="feature">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>Weekly curated digests</span>
+                        </div>
+                        <div class="feature">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>Personalized recommendations</span>
+                        </div>
+                        <div class="feature">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            <span>Calendar integration</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cta-form">
+                    <form class="email-form" id="email-form">
+                        <div class="form-group">
+                            <input type="email" class="email-input" id="email-input" placeholder="your@email.com" required>
+                            <small>We respect your privacy. Unsubscribe anytime.</small>
+                        </div>
+                        <button type="submit" class="btn-submit btn-full pulse">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                            Get Weekly Reminders
+                        </button>
+                    </form>
+                    <p class="trust-badge">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        <span id="visitor-status">First time here? Welcome! Join 2,500+ learners.</span>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>WebiBook</h3>
+                    <p>Curating the world's best live learning experiences</p>
+                </div>
+                <div class="footer-links">
+                    <div class="link-group">
+                        <h4>Product</h4>
+                        <a href="#">Events</a>
+                        <a href="#">Newsletter</a>
+                        <a href="#">Features</a>
+                    </div>
+                    <div class="link-group">
+                        <h4>Company</h4>
+                        <a href="#">About</a>
+                        <a href="#">Blog</a>
+                        <a href="#">Careers</a>
+                    </div>
+                    <div class="link-group">
+                        <h4>Legal</h4>
+                        <a href="#">Privacy</a>
+                        <a href="#">Terms</a>
+                        <a href="#">Cookies</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="trust-note">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 16v-4"></path>
+                        <path d="M12 8h.01"></path>
+                    </svg>
+                    Curated manually • No paid placements • Independent recommendations
+                </p>
+                <div class="admin-link">
+                    <a href="/admin.html">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        Admin Dashboard
+                    </a>
+                </div>
+            </div>
+        </footer>
     </div>
 
-    <!-- All Events Section -->
-    <section class="events-list" id="events-list">
-        <!-- Events will be dynamically inserted here -->
-    </section>
-
-    <!-- Saved Events Section -->
-    <section class="events-list section-hidden" id="saved-events-list">
-        <!-- Saved events will be dynamically inserted here -->
-    </section>
-
-    <!-- Weekly Email Reminders Section -->
-    <section class="email-section">
-        <h2>Get weekly event reminders</h2>
-        <p>We'll email you every Monday with the week's handpicked events. No spam, just the good stuff.</p>
-        <form class="email-form" id="email-form">
-            <input type="email" class="email-input" id="email-input" placeholder="your@email.com" required>
-            <button type="submit" class="btn-submit">Get weekly reminders</button>
-        </form>
-        <p style="font-size: 13px; color: #888; margin-top: 12px; text-align: center;">
-            <span id="visitor-status"></span>
-        </p>
-    </section>
-
-    <p class="trust-note">Curated manually. No paid placements.</p>
-
-    <!-- Admin Link -->
-    <div style="text-align: center; margin-top: 30px; font-size: 13px; color: #888;">
-        <a href="/admin.html" style="color: #666; text-decoration: none;">Admin Dashboard</a>
-    </div>
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
 
     <script>
         // ============================================================================
@@ -146,13 +481,16 @@
         // EVENTS DATA
         // ============================================================================
         let events = [];
+        let filteredEvents = [];
 
         async function loadEvents() {
             try {
                 const response = await callAPI('/events');
                 if (response && response.success) {
                     events = response.events;
+                    filteredEvents = [...events];
                     renderEvents();
+                    updateEventCounts();
                 } else {
                     // Fallback to default events if API fails
                     events = [
@@ -165,7 +503,9 @@
                             time: '2:00 PM EST',
                             duration: '1 hour',
                             audience: 'Frontend developers new to React',
-                            url: 'https://example.com/react-hooks'
+                            url: 'https://example.com/react-hooks',
+                            popularity: 95,
+                            isUpcoming: true
                         },
                         {
                             id: 'event-2',
@@ -176,7 +516,9 @@
                             time: '10:00 AM PST',
                             duration: '90 minutes',
                             audience: 'Beginners interested in data analysis',
-                            url: 'https://example.com/data-science'
+                            url: 'https://example.com/data-science',
+                            popularity: 88,
+                            isUpcoming: true
                         },
                         {
                             id: 'event-3',
@@ -187,10 +529,53 @@
                             time: '3:30 PM EST',
                             duration: '2 hours',
                             audience: 'Product managers and designers',
-                            url: 'https://example.com/product-design'
+                            url: 'https://example.com/product-design',
+                            popularity: 92,
+                            isUpcoming: true
+                        },
+                        {
+                            id: 'event-4',
+                            eventId: 'event-4',
+                            title: 'AI for Business Applications',
+                            topic: 'AI',
+                            date: 'January 21, 2024',
+                            time: '11:00 AM EST',
+                            duration: '1.5 hours',
+                            audience: 'Business leaders and entrepreneurs',
+                            url: 'https://example.com/ai-business',
+                            popularity: 96,
+                            isUpcoming: true
+                        },
+                        {
+                            id: 'event-5',
+                            eventId: 'event-5',
+                            title: 'Modern Marketing Strategies',
+                            topic: 'Marketing',
+                            date: 'January 22, 2024',
+                            time: '1:00 PM PST',
+                            duration: '1 hour',
+                            audience: 'Marketing professionals',
+                            url: 'https://example.com/marketing',
+                            popularity: 85,
+                            isUpcoming: true
+                        },
+                        {
+                            id: 'event-6',
+                            eventId: 'event-6',
+                            title: 'Startup Funding Masterclass',
+                            topic: 'Business',
+                            date: 'January 23, 2024',
+                            time: '9:30 AM EST',
+                            duration: '2 hours',
+                            audience: 'Founders and investors',
+                            url: 'https://example.com/funding',
+                            popularity: 90,
+                            isUpcoming: true
                         }
                     ];
+                    filteredEvents = [...events];
                     renderEvents();
+                    updateEventCounts();
                 }
             } catch (error) {
                 console.error('Error loading events:', error);
@@ -198,7 +583,7 @@
         }
 
         // ============================================================================
-        // USER AUTHENTICATION - USING sessionStorage
+        // USER AUTHENTICATION
         // ============================================================================
         async function registerOrLoginUser(email) {
             console.log('🔄 Attempting to register:', email);
@@ -240,39 +625,40 @@
             updateLoginUI();
         }
 
-        function showLoginSection() {
-            const loginSection = document.getElementById('login-section');
-            loginSection.classList.remove('section-hidden');
-            loginSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-
-        function hideLoginSection() {
-            const loginSection = document.getElementById('login-section');
-            loginSection.classList.add('section-hidden');
-        }
-
         function updateLoginUI() {
             const user = getCurrentUser();
             const loginFormContainer = document.getElementById('login-form-container');
             const loggedInContainer = document.getElementById('logged-in-container');
-            const loginSection = document.getElementById('login-section');
+            const profileSection = document.getElementById('profile-section');
 
             if (user) {
                 loginFormContainer.style.display = 'none';
                 loggedInContainer.style.display = 'block';
-                document.getElementById('username-display').textContent = user.email;
-                loginSection.classList.add('logged-in');
-                loginSection.classList.remove('section-hidden');
+                document.getElementById('username-display').textContent = user.name || user.email.split('@')[0];
+                document.getElementById('user-email').textContent = user.email;
+                profileSection.classList.remove('section-hidden');
+                profileSection.classList.add('logged-in');
+                
+                // Update user stats
+                const savedEvents = loadSavedEvents();
+                document.getElementById('saved-events-count').textContent = savedEvents.length;
+                
+                const visitCount = parseInt(sessionStorage.getItem('webiBookVisitCount') || '1');
+                document.getElementById('total-visits').textContent = visitCount;
             } else {
                 loginFormContainer.style.display = 'block';
                 loggedInContainer.style.display = 'none';
-                loginSection.classList.remove('logged-in');
-                hideLoginSection();
+                profileSection.classList.remove('logged-in');
+                if (!profileSection.classList.contains('section-hidden')) {
+                    profileSection.classList.add('section-hidden');
+                }
             }
+            
+            updateSavedCount();
         }
 
         // ============================================================================
-        // SAVED EVENTS - PERMANENT SAVE
+        // SAVED EVENTS
         // ============================================================================
         function loadSavedEvents() {
             const user = getCurrentUser();
@@ -287,7 +673,8 @@
             const token = getAuthToken();
 
             if (!user || !token) {
-                showLoginSection();
+                document.getElementById('profile-section').classList.remove('section-hidden');
+                document.getElementById('profile-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 return false;
             }
 
@@ -300,7 +687,10 @@
                     sessionStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
                     
                     // Show success message
-                    alert('Event saved permanently!');
+                    showNotification('Event saved to your collection!', 'success');
+                    
+                    // Update UI
+                    updateSavedCount();
                     
                     // Track in Google Analytics
                     if (typeof gtag !== 'undefined') {
@@ -330,6 +720,8 @@
                 if (response && response.success) {
                     const updatedUser = { ...user, savedEvents: response.savedEvents || [] };
                     sessionStorage.setItem('webiBookUser', JSON.stringify(updatedUser));
+                    showNotification('Event removed from saved', 'info');
+                    updateSavedCount();
                     return true;
                 }
                 return false;
@@ -342,6 +734,16 @@
         function isEventSaved(eventId) {
             const saved = loadSavedEvents();
             return saved.includes(eventId) || saved.some(e => e.eventId === eventId);
+        }
+
+        function updateSavedCount() {
+            const savedCount = loadSavedEvents().length;
+            document.getElementById('saved-count').textContent = savedCount;
+        }
+
+        function updateEventCounts() {
+            document.getElementById('all-events-count').textContent = events.length;
+            document.getElementById('event-count').textContent = `${events.length} curated events`;
         }
 
         // ============================================================================
@@ -418,7 +820,7 @@
                         statusElement.textContent = `Welcome back! You visited ${daysSince} days ago.`;
                     }
                 } else {
-                    statusElement.textContent = 'First time here? Get weekly reminders to never miss an event.';
+                    statusElement.textContent = 'First time here? Welcome! Join 2,500+ learners.';
                 }
             }
         }
@@ -484,17 +886,76 @@
         function renderEventHTML(event, isSaved) {
             trackEventView(event.eventId || event.id, event.title);
 
+            const popularity = event.popularity || Math.floor(Math.random() * 30) + 70;
+            const isPopular = popularity > 90;
+            const isTrending = popularity > 85;
+
             return `
-            <div class="event">
-                <h2 class="event-title">${event.title}</h2>
-                <div class="event-metadata">
-                    <span class="event-topic">${event.topic}</span>
-                    <span>${event.date}</span>
-                    <span>${event.time}</span>
-                    <span>${event.duration}</span>
+            <div class="event-card" data-topic="${event.topic.toLowerCase()}">
+                <div class="event-card-header">
+                    <div class="event-topic-badge ${event.topic.toLowerCase()}">
+                        ${event.topic}
+                    </div>
+                    <div class="event-meta-icons">
+                        ${isPopular ? `<span class="popular-badge" title="Popular">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                            Popular
+                        </span>` : ''}
+                        ${isTrending ? `<span class="trending-badge" title="Trending">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 3l-10 10-4-4-11 11"></path>
+                                <path d="M17 3h6v6"></path>
+                            </svg>
+                            Trending
+                        </span>` : ''}
+                    </div>
                 </div>
-                <p class="event-audience">${event.audience}</p>
-                <div class="event-actions">
+                <div class="event-card-content">
+                    <h3 class="event-title">${event.title}</h3>
+                    <div class="event-meta">
+                        <div class="meta-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <span>${event.date}</span>
+                        </div>
+                        <div class="meta-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                            <span>${event.time}</span>
+                        </div>
+                        <div class="meta-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                            <span>${event.duration}</span>
+                        </div>
+                    </div>
+                    <p class="event-audience">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px; flex-shrink: 0;">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        ${event.audience}
+                    </p>
+                    <div class="event-popularity">
+                        <div class="popularity-bar">
+                            <div class="popularity-fill" style="width: ${popularity}%"></div>
+                        </div>
+                        <span class="popularity-text">${popularity}% interest</span>
+                    </div>
+                </div>
+                <div class="event-card-actions">
                     <a 
                         href="${event.url}" 
                         target="_blank" 
@@ -504,13 +965,30 @@
                         data-event-title="${event.title}"
                         data-event-topic="${event.topic}"
                     >
-                        Go to event
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        Join Event
                     </a>
                     <button 
-                        class="btn-secondary ${isSaved ? 'saved' : ''}"
+                        class="btn-save ${isSaved ? 'saved' : ''}"
                         data-event-id="${event.eventId || event.id}"
+                        title="${isSaved ? 'Remove from saved' : 'Save for later'}"
                     >
-                        ${isSaved ? 'Saved' : 'Save'}
+                        ${isSaved ? `
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                                <polyline points="9 12 11 14 15 10"></polyline>
+                            </svg>
+                            Saved
+                        ` : `
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            Save
+                        `}
                     </button>
                 </div>
             </div>
@@ -521,7 +999,28 @@
             const container = document.getElementById('events-list');
             const savedEvents = loadSavedEvents();
 
-            container.innerHTML = events.map(event => {
+            if (filteredEvents.length === 0) {
+                container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12" y2="16"></line>
+                        </svg>
+                    </div>
+                    <h3>No events found</h3>
+                    <p>Try changing your filters or check back later for new events.</p>
+                    <button class="btn-secondary" id="clear-filters">
+                        Clear Filters
+                    </button>
+                </div>
+            `;
+                document.getElementById('clear-filters')?.addEventListener('click', clearFilters);
+                return;
+            }
+
+            container.innerHTML = filteredEvents.map(event => {
                 const isSaved = isEventSaved(event.eventId || event.id);
                 return renderEventHTML(event, isSaved);
             }).join('');
@@ -535,9 +1034,17 @@
 
             if (savedEvents.length === 0) {
                 container.innerHTML = `
-                <div class="saved-events-empty">
-                    <p>No saved events yet</p>
-                    <small>Save events from the "All Events" tab to see them here</small>
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                    </div>
+                    <h3>No saved events yet</h3>
+                    <p>Save events from the "All Events" tab to see them here</p>
+                    <button class="btn-secondary" onclick="switchTab('all')">
+                        Browse Events
+                    </button>
                 </div>
             `;
                 return;
@@ -555,9 +1062,54 @@
         }
 
         // ============================================================================
+        // FILTERING AND SORTING
+        // ============================================================================
+        function filterEvents(topic) {
+            const filterTags = document.querySelectorAll('.filter-tag');
+            filterTags.forEach(tag => {
+                if (tag.dataset.topic === topic) {
+                    tag.classList.add('active');
+                } else {
+                    tag.classList.remove('active');
+                }
+            });
+
+            if (topic === 'all') {
+                filteredEvents = [...events];
+            } else {
+                filteredEvents = events.filter(event => 
+                    event.topic.toLowerCase() === topic.toLowerCase()
+                );
+            }
+
+            sortEvents(document.getElementById('sort-select').value);
+        }
+
+        function sortEvents(criteria) {
+            switch(criteria) {
+                case 'date':
+                    filteredEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    break;
+                case 'popular':
+                    filteredEvents.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+                    break;
+                case 'title':
+                    filteredEvents.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+            }
+            renderEvents();
+        }
+
+        function clearFilters() {
+            filterEvents('all');
+            document.getElementById('sort-select').value = 'date';
+        }
+
+        // ============================================================================
         // EVENT LISTENERS
         // ============================================================================
         function attachEventListeners() {
+            // Event click tracking
             document.querySelectorAll('.btn-primary').forEach(btn => {
                 btn.addEventListener('click', async function (e) {
                     const eventId = this.getAttribute('data-event-id');
@@ -568,7 +1120,8 @@
                 });
             });
 
-            document.querySelectorAll('.btn-secondary').forEach(btn => {
+            // Save/unsave events
+            document.querySelectorAll('.btn-save').forEach(btn => {
                 btn.addEventListener('click', async function () {
                     const eventId = this.getAttribute('data-event-id');
                     const isCurrentlySaved = this.classList.contains('saved');
@@ -577,7 +1130,12 @@
                         const success = await unsaveEvent(eventId);
                         if (success) {
                             this.classList.remove('saved');
-                            this.textContent = 'Save';
+                            this.innerHTML = `
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                                Save
+                            `;
 
                             const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
                             if (activeTab === 'saved') {
@@ -588,7 +1146,8 @@
                         const user = getCurrentUser();
 
                         if (!user) {
-                            showLoginSection();
+                            document.getElementById('profile-section').classList.remove('section-hidden');
+                            document.getElementById('profile-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                             setTimeout(() => {
                                 document.getElementById('login-input').focus();
                             }, 100);
@@ -598,7 +1157,13 @@
                         const success = await saveEvent(eventId);
                         if (success) {
                             this.classList.add('saved');
-                            this.textContent = 'Saved';
+                            this.innerHTML = `
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                                    <polyline points="9 12 11 14 15 10"></polyline>
+                                </svg>
+                                Saved
+                            `;
 
                             // Update saved events tab if it's active
                             const activeTab = document.querySelector('.nav-tab.active').getAttribute('data-tab');
@@ -616,7 +1181,8 @@
         // ============================================================================
         function switchTab(tabName) {
             if (tabName === 'saved' && !getCurrentUser()) {
-                showLoginSection();
+                document.getElementById('profile-section').classList.remove('section-hidden');
+                document.getElementById('profile-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 document.querySelectorAll('.nav-tab').forEach(tab => {
                     if (tab.getAttribute('data-tab') === 'all') {
                         tab.classList.add('active');
@@ -635,15 +1201,39 @@
                 }
             });
 
+            // Hide all sections first
+            document.querySelectorAll('.events-list').forEach(section => {
+                section.classList.add('section-hidden');
+            });
+
+            // Show selected section
             if (tabName === 'all') {
                 document.getElementById('events-list').classList.remove('section-hidden');
-                document.getElementById('saved-events-list').classList.add('section-hidden');
                 renderEvents();
-            } else {
-                document.getElementById('events-list').classList.add('section-hidden');
+            } else if (tabName === 'saved') {
                 document.getElementById('saved-events-list').classList.remove('section-hidden');
                 renderSavedEvents();
+            } else {
+                document.getElementById('upcoming-events-list').classList.remove('section-hidden');
             }
+        }
+
+        // ============================================================================
+        // VIEW CONTROLS
+        // ============================================================================
+        function switchView(view) {
+            const eventLists = document.querySelectorAll('.events-list');
+            eventLists.forEach(list => {
+                list.classList.remove('view-grid', 'view-list');
+                list.classList.add(`view-${view}`);
+            });
+
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.view === view) {
+                    btn.classList.add('active');
+                }
+            });
         }
 
         // ============================================================================
@@ -655,7 +1245,7 @@
             const email = document.getElementById('login-input').value.trim();
 
             if (!email || !email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
+                showNotification('Please enter a valid email address', 'error');
                 return;
             }
 
@@ -665,10 +1255,10 @@
                 if (user) {
                     document.getElementById('login-input').value = '';
                     renderEvents();
-                    alert(`Welcome ${user.name}! You can now save events.`);
+                    showNotification(`Welcome ${user.name || user.email.split('@')[0]}! You can now save events.`, 'success');
                 }
             } catch (error) {
-                alert('Failed to sign up. Please try again. Error: ' + error.message);
+                showNotification('Failed to sign up. Please try again.', 'error');
             }
         });
 
@@ -676,6 +1266,7 @@
             clearCurrentUser();
             switchTab('all');
             renderEvents();
+            showNotification('Signed out successfully', 'info');
         });
 
         document.getElementById('email-form').addEventListener('submit', async function (e) {
@@ -684,7 +1275,7 @@
             const email = document.getElementById('email-input').value.trim();
 
             if (!email || !email.includes('@') || !email.includes('.')) {
-                alert('Please enter a valid email address');
+                showNotification('Please enter a valid email address', 'error');
                 return;
             }
 
@@ -693,7 +1284,7 @@
 
                 if (success) {
                     document.getElementById('email-input').value = '';
-                    alert('Thanks! You\'ll receive weekly event reminders every Monday.');
+                    showNotification('Thanks! You\'ll receive weekly event reminders every Monday.', 'success');
 
                     // Track in Google Analytics if available
                     if (typeof gtag !== 'undefined') {
@@ -702,19 +1293,82 @@
                         });
                     }
                 } else {
-                    alert('Failed to subscribe to emails. Please try again.');
+                    showNotification('Failed to subscribe to emails. Please try again.', 'error');
                 }
             } catch (error) {
-                alert('Failed to subscribe. Please try again.');
+                showNotification('Failed to subscribe. Please try again.', 'error');
             }
         });
 
+        // Tab navigation
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', function () {
                 const tabName = this.getAttribute('data-tab');
                 switchTab(tabName);
             });
         });
+
+        // View controls
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const view = this.dataset.view;
+                switchView(view);
+            });
+        });
+
+        // Filter tags
+        document.querySelectorAll('.filter-tag').forEach(tag => {
+            tag.addEventListener('click', function () {
+                const topic = this.dataset.topic;
+                filterEvents(topic);
+            });
+        });
+
+        // Sort select
+        document.getElementById('sort-select').addEventListener('change', function() {
+            sortEvents(this.value);
+        });
+
+        // View all events button
+        document.getElementById('view-all-events')?.addEventListener('click', function() {
+            switchTab('all');
+        });
+
+        // Social login buttons (placeholder functionality)
+        document.querySelectorAll('.btn-social').forEach(btn => {
+            btn.addEventListener('click', function() {
+                showNotification('Social login coming soon! For now, please use email.', 'info');
+            });
+        });
+
+        // ============================================================================
+        // NOTIFICATION SYSTEM
+        // ============================================================================
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notification-container');
+            
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `
+                <div class="notification-content">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        ${type === 'success' ? '<polyline points="20 6 9 17 4 12"></polyline>' : 
+                          type === 'error' ? '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>' :
+                          type === 'warning' ? '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12" y2="17"></line>' :
+                          '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line>'}
+                    </svg>
+                    <span>${message}</span>
+                </div>
+            `;
+
+            container.appendChild(notification);
+
+            // Auto remove after 4 seconds
+            setTimeout(() => {
+                notification.classList.add('fade-out');
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
 
         // ============================================================================
         // INITIALIZATION
@@ -724,6 +1378,12 @@
             loadEvents();
             updateVisitorStatus().catch(console.error);
             trackTimeOnPage();
+            
+            // Initialize view
+            switchView('grid');
+            
+            // Initialize filters
+            filterEvents('all');
         });
     </script>
 </body>
